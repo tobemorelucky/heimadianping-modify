@@ -26,3 +26,8 @@ mybatis-plus:
 logging:
   level:
     com.hmdp: debug
+
+# 秒杀消费者名在同一消费者组内必须唯一，并在实例重启后保持稳定。
+hmdp:
+  seckill:
+    consumer-name: ${SECKILL_CONSUMER_NAME:c1}
