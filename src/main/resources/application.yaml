@@ -19,6 +19,23 @@ spring:
         max-idle: 10
         min-idle: 1
         time-between-eviction-runs: 10s
+  kafka:
+    # 通过环境变量覆盖生产环境 Kafka 地址，本地默认连接 9092 端口。
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:127.0.0.1:9092}
+    producer:
+      acks: all
+      retries: 3
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+    consumer:
+      group-id: hmdp-seckill-order-create-v1
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+    listener:
+      # Phase 1 只打印消息；监听方法正常返回后按记录提交 offset。
+      ack-mode: record
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
 mybatis-plus:
@@ -31,3 +48,6 @@ logging:
 hmdp:
   seckill:
     consumer-name: ${SECKILL_CONSUMER_NAME:c1}
+  kafka:
+    topics:
+      voucher-order: ${KAFKA_VOUCHER_ORDER_TOPIC:hmdp.seckill.order.create.v1}
