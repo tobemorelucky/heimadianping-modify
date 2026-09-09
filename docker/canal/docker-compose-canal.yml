@@ -1,0 +1,53 @@
+name: canal
+
+services:
+  canal-server:
+    image: canal/canal-server:v1.1.8
+    container_name: hmdp-canal
+    hostname: hmdp-canal
+    restart: unless-stopped
+    ports:
+      # Canal Client TCP 端口，仅暴露给本机开发环境。
+      - "127.0.0.1:11111:11111"
+    environment:
+      - TZ=Asia/Shanghai
+      # 单实例只启用 hmdp destination，避免默认扫描无关实例。
+      - canal.auto.scan=false
+      - canal.destinations=hmdp
+      # Docker Desktop 通过 host.docker.internal 访问宿主机 MySQL。
+      - canal.instance.master.address=${CANAL_DB_HOST:-host.docker.internal}:${CANAL_DB_PORT:-3306}
+      - canal.instance.dbUsername=${CANAL_DB_USERNAME:-canal}
+      - canal.instance.dbPassword=${CANAL_DB_PASSWORD:-canal}
+      - canal.instance.connectionCharset=UTF-8
+      - canal.instance.gtidon=false
+      - canal.instance.tsdb.enable=true
+      # Canal 模拟 MySQL replica，slaveId 必须与 MySQL server_id 及其他副本不同。
+      - canal.instance.slaveId=${CANAL_SLAVE_ID:-1234}
+      # 首期只订阅 hmdp.tb_shop，减少无关 binlog 解析和业务误消费。
+      - canal.instance.filter.regex=${CANAL_FILTER_REGEX:-hmdp\.tb_shop}
+    extra_hosts:
+      # 兼容支持 host-gateway 的 Linux Docker；Docker Desktop 也提供该主机名。
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # conf 中包含 destination 配置、meta.dat 和 TSDB 数据，需要持久化消费位置。
+      - hmdp-canal-data:/home/admin/canal-server/conf
+      - hmdp-canal-logs:/home/admin/canal-server/logs
+    networks:
+      - hmdp-canal-network
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 11111 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 18
+      start_period: 60s
+
+networks:
+  hmdp-canal-network:
+    name: hmdp-canal-network
+    driver: bridge
+
+volumes:
+  hmdp-canal-data:
+    name: hmdp-canal-data
+  hmdp-canal-logs:
+    name: hmdp-canal-logs

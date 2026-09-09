@@ -54,6 +54,18 @@
             <groupId>org.springframework.kafka</groupId>
             <artifactId>spring-kafka</artifactId>
         </dependency>
+        <!-- Canal 原生 Client，用于消费 MySQL ROW binlog，不引入 Canal Adapter。 -->
+        <dependency>
+            <groupId>com.alibaba.otter</groupId>
+            <artifactId>canal.client</artifactId>
+            <version>1.1.8</version>
+        </dependency>
+        <!-- canal.client 将协议包声明为 optional，业务解析 Entry 时需要显式引入。 -->
+        <dependency>
+            <groupId>com.alibaba.otter</groupId>
+            <artifactId>canal.protocol</artifactId>
+            <version>1.1.8</version>
+        </dependency>
 
         <dependency>
             <groupId>mysql</groupId>

@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 /**
  * 秒杀订单 Kafka 消息。
  *
- * <p>Phase 1 仅用于验证 Kafka 基础设施，不改变现有订单处理流程。</p>
+ * <p>由秒杀入口在 Redis Lua 准入成功后发送，消费者据此创建数据库订单。</p>
  */
 @Data
 @NoArgsConstructor

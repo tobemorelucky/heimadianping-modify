@@ -1,0 +1,36 @@
+services:
+  kafka:
+    image: apache/kafka:3.9.2
+    hostname: hmdp-kafka
+    container_name: hmdp-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      # 单节点同时承担 broker 和 controller 角色，使用 KRaft 且不依赖 ZooKeeper。
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@hmdp-kafka:29093"
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+
+      # 9092 供宿主机 Spring Boot 使用，19092 供 Docker 网络内客户端使用。
+      KAFKA_LISTENERS: "CONTROLLER://:29093,PLAINTEXT_HOST://:9092,PLAINTEXT://:19092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT_HOST://localhost:9092,PLAINTEXT://hmdp-kafka:19092"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_INTER_BROKER_LISTENER_NAME: "PLAINTEXT"
+
+      # 固定集群标识和数据目录，保证命名卷重启后可以继续使用原有日志。
+      CLUSTER_ID: "4L6g3nShT-eMCtK--X86sw"
+      KAFKA_LOG_DIRS: "/var/lib/kafka/data"
+
+      # 本地单节点无法提供多副本，Kafka 内部 Topic 参数必须调整为 1。
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 12
+    volumes:
+      - hmdp-kafka-data:/var/lib/kafka/data
+
+volumes:
+  hmdp-kafka-data:
+    name: hmdp-kafka-data

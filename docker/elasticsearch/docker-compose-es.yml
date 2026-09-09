@@ -1,0 +1,68 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.19.21
+    container_name: hmdp-elasticsearch
+    hostname: hmdp-elasticsearch
+    restart: unless-stopped
+    environment:
+      # 本地开发使用单节点模式；不参与任何生产集群发现。
+      discovery.type: single-node
+      cluster.name: hmdp-es-local
+      node.name: hmdp-elasticsearch
+
+      # 仅用于本机开发，关闭 8.x 默认安全认证以简化 Spring Boot 和 Kibana 联调。
+      xpack.security.enabled: "false"
+      xpack.security.enrollment.enabled: "false"
+
+      # 限制本地 JVM 堆，避免与已有 Kafka、MySQL、Redis 争抢过多内存。
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+      bootstrap.memory_lock: "true"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "127.0.0.1:9200:9200"
+    volumes:
+      - hmdp-elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - hmdp-es-network
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s' || exit 1"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.19.21
+    container_name: hmdp-kibana
+    hostname: hmdp-kibana
+    restart: unless-stopped
+    environment:
+      SERVER_NAME: hmdp-kibana
+      ELASTICSEARCH_HOSTS: '["http://hmdp-elasticsearch:9200"]'
+      XPACK_SECURITY_ENABLED: "false"
+      TELEMETRY_ENABLED: "false"
+    ports:
+      - "127.0.0.1:5601:5601"
+    volumes:
+      - hmdp-kibana-data:/usr/share/kibana/data
+    networks:
+      - hmdp-es-network
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+volumes:
+  hmdp-elasticsearch-data:
+    name: hmdp-elasticsearch-data
+  hmdp-kibana-data:
+    name: hmdp-kibana-data
+
+networks:
+  hmdp-es-network:
+    name: hmdp-es-network
+    driver: bridge

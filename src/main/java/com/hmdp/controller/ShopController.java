@@ -1,12 +1,10 @@
 package com.hmdp.controller;
 
 
-import cn.hutool.core.util.StrUtil;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hmdp.dto.Result;
+import com.hmdp.elasticsearch.service.ShopSearchService;
 import com.hmdp.entity.Shop;
 import com.hmdp.service.IShopService;
-import com.hmdp.utils.SystemConstants;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
@@ -24,6 +22,10 @@ public class ShopController {
 
     @Resource
     public IShopService shopService;
+
+    /** 商户全文搜索服务，仅用于名称搜索接口。 */
+    @Resource
+    private ShopSearchService shopSearchService;
 
     /**
      * 根据id查询商铺信息
@@ -86,11 +88,7 @@ public class ShopController {
             @RequestParam(value = "name", required = false) String name,
             @RequestParam(value = "current", defaultValue = "1") Integer current
     ) {
-        // 根据类型分页查询
-        Page<Shop> page = shopService.query()
-                .like(StrUtil.isNotBlank(name), "name", name)
-                .page(new Page<>(current, SystemConstants.MAX_PAGE_SIZE));
-        // 返回数据
-        return Result.ok(page.getRecords());
+        // 接口协议保持不变，仅将名称检索职责切换到 Elasticsearch 搜索服务。
+        return Result.ok(shopSearchService.searchByName(name, current));
     }
 }

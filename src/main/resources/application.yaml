@@ -34,8 +34,8 @@ spring:
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
     listener:
-      # Phase 1 只打印消息；监听方法正常返回后按记录提交 offset。
-      ack-mode: record
+      # Phase 2 由订单事务成功后的 Consumer 显式确认 offset。
+      ack-mode: manual_immediate
   jackson:
     default-property-inclusion: non_null # JSON处理时忽略非空字段
 mybatis-plus:
@@ -44,6 +44,24 @@ logging:
   level:
     com.hmdp: debug
 
+# Canal Server 连接参数统一由配置管理，环境变量可覆盖本地默认值。
+canal:
+  enabled: ${CANAL_ENABLED:true}
+  host: ${CANAL_HOST:127.0.0.1}
+  port: ${CANAL_PORT:11111}
+  destination: ${CANAL_DESTINATION:hmdp}
+  subscription: ${CANAL_SUBSCRIPTION:hmdp\.tb_shop}
+  username: ${CANAL_USERNAME:}
+  password: ${CANAL_PASSWORD:}
+  batch-size: ${CANAL_BATCH_SIZE:100}
+  poll-timeout-millis: ${CANAL_POLL_TIMEOUT_MILLIS:1000}
+  retry-interval-millis: ${CANAL_RETRY_INTERVAL_MILLIS:3000}
+
+# 秒杀消息链路默认切换到 Kafka；灰度回退时可设置为 redis。
+seckill:
+  message:
+    mode: ${SECKILL_MESSAGE_MODE:kafka}
+
 # 秒杀消费者名在同一消费者组内必须唯一，并在实例重启后保持稳定。
 hmdp:
   seckill:
@@ -51,3 +69,8 @@ hmdp:
   kafka:
     topics:
       voucher-order: ${KAFKA_VOUCHER_ORDER_TOPIC:hmdp.seckill.order.create.v1}
+      voucher-order-retry: ${KAFKA_VOUCHER_ORDER_RETRY_TOPIC:hmdp.seckill.order.retry.v1}
+      voucher-order-dlt: ${KAFKA_VOUCHER_ORDER_DLT_TOPIC:hmdp.seckill.order.dlt.v1}
+    consumer:
+      retry-group-id: ${KAFKA_VOUCHER_ORDER_RETRY_GROUP:hmdp-seckill-order-retry-v1}
+      dlt-group-id: ${KAFKA_VOUCHER_ORDER_DLT_GROUP:hmdp-seckill-order-dlt-log-v1}

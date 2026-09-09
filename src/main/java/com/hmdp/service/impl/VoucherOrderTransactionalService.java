@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 秒杀订单数据库事务边界。
  *
- * <p>该类独立于 Stream 消费者，确保方法经由 Spring 代理调用，库存扣减和
+ * <p>该类独立于具体消息消费者，确保方法经由 Spring 代理调用，库存扣减和
  * 订单插入要么同时提交，要么同时回滚。</p>
  */
 @Slf4j
@@ -35,7 +35,7 @@ public class VoucherOrderTransactionalService {
     /**
      * 幂等创建订单，并在同一事务中扣减数据库库存。
      *
-     * @param voucherOrder Lua 产生的订单消息
+     * @param voucherOrder 异步消息转换得到的订单
      */
     @Transactional(rollbackFor = Exception.class)
     public void createVoucherOrder(VoucherOrder voucherOrder) {

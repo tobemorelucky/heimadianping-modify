@@ -5,6 +5,8 @@ local voucherId = ARGV[1]
 local userId = ARGV[2]
 -- 1.3.订单id
 local orderId = ARGV[3]
+-- 1.4.消息模式：redis 或 kafka
+local messageMode = ARGV[4]
 
 -- 2.数据key
 -- 2.1.库存key
@@ -27,6 +29,8 @@ end
 redis.call('incrby', stockKey, -1)
 -- 3.5.下单（保存用户）sadd orderKey userId
 redis.call('sadd', orderKey, userId)
--- 3.6.发送消息到队列中， XADD stream.orders * k1 v1 k2 v2 ...
-redis.call('xadd', 'stream.orders', '*', 'userId', userId, 'voucherId', voucherId, 'id', orderId)
+-- 3.6.Redis 模式继续写入原 Stream；Kafka 模式由 Java 入口在 Lua 成功后投递 Kafka。
+if(messageMode == 'redis') then
+    redis.call('xadd', 'stream.orders', '*', 'userId', userId, 'voucherId', voucherId, 'id', orderId)
+end
 return 0
