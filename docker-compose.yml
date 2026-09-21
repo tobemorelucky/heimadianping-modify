@@ -1,0 +1,73 @@
+name: hmdp-local
+
+# 复用已独立验证的组件编排，子目录 Compose 仍可单独使用。
+include:
+  - path: docker/kafka/docker-compose-kafka.yml
+  - path: docker/elasticsearch/docker-compose-es.yml
+  - path: docker/canal/docker-compose-canal.yml
+
+services:
+  canal-server:
+    environment:
+      # 根 Compose 默认使用宿主机 3307，避免与本机 MySQL 的 3306 冲突。
+      - canal.instance.master.address=${CANAL_DB_HOST:-host.docker.internal}:${CANAL_DB_PORT:-3307}
+
+  mysql:
+    image: mysql:8.0.30
+    container_name: hmdp-mysql
+    hostname: hmdp-mysql
+    restart: unless-stopped
+    command:
+      # 与 Canal 保持一致：开启 ROW binlog 并保留完整行镜像。
+      - --default-authentication-plugin=mysql_native_password
+      - --server-id=1
+      - --log-bin=mysql-bin
+      - --binlog-format=ROW
+      - --binlog-row-image=FULL
+      # 原始黑马点评数据脚本来自 MySQL 5.6，秒杀券时间字段使用零日期默认值；
+      # MySQL 8 默认的 NO_ZERO_DATE 会令首次初始化在中途终止，因此仅关闭零日期检查。
+      - --sql-mode=ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+    environment:
+      TZ: Asia/Shanghai
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-123456}
+      MYSQL_DATABASE: hmdp
+    ports:
+      # 默认使用 3307；仍可通过 MYSQL_HOST_PORT 显式覆盖。
+      - "127.0.0.1:${MYSQL_HOST_PORT:-3307}:3306"
+    volumes:
+      - hmdp-mysql-data:/var/lib/mysql
+      # 仅在数据卷首次创建时执行项目初始化脚本。
+      - ./src/main/resources/db/hmdp.sql:/docker-entrypoint-initdb.d/01-hmdp.sql:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        # 不仅检查端口，还检查原项目所需的 10 张表，避免 SQL 中途失败后仍被误判为健康。
+        - "mysqladmin ping -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} --silent && [ \"$$(mysql -h 127.0.0.1 -uroot -p$${MYSQL_ROOT_PASSWORD} -Nse \"SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='hmdp' AND table_name IN ('tb_blog','tb_blog_comments','tb_follow','tb_seckill_voucher','tb_shop','tb_shop_type','tb_user','tb_user_info','tb_voucher','tb_voucher_order')\")\" -eq 10 ]"
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  redis:
+    image: redis:7-alpine
+    container_name: hmdp-redis
+    hostname: hmdp-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - hmdp-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  hmdp-mysql-data:
+    name: hmdp-mysql-data
+  hmdp-redis-data:
+    name: hmdp-redis-data

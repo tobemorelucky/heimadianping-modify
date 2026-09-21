@@ -4,9 +4,9 @@ spring:
   application:
     name: hmdp
   datasource:
-    #   改动了
     driver-class-name: com.mysql.jdbc.Driver
-    url: jdbc:mysql://127.0.0.1:3306/hmdp?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
+    # 根 Docker Compose 默认将 MySQL 暴露到 3307，其他环境可通过变量覆盖。
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://127.0.0.1:3307/hmdp?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
     username: root
     password: 123456
   redis:

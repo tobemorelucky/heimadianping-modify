@@ -21,6 +21,8 @@ public class MvcConfig implements WebMvcConfigurer {
         registry.addInterceptor(new LoginInterceptor())
                 .excludePathPatterns(
                         "/shop/**",
+                        // AI Phase 2 仅开放与公开店铺详情等价的只读基础信息接口。
+                        "/api/ai/shop/**",
                         "/voucher/**",
                         "/shop-type/**",
                         "/upload/**",

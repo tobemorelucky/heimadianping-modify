@@ -1,0 +1,181 @@
+{
+  "fault_id": "KAFKA_CONSUMER_DOWN_001",
+  "final_diagnosis": {
+    "status": "confirmed",
+    "title": "秒杀订单异步创建延迟诊断报告",
+    "conclusion": "Kafka 消费者无活跃成员，消息持续积压；应用日志同时记录 consumer stopped unexpectedly。",
+    "root_cause": "Kafka消费者不可用导致消息积压",
+    "confidence": 0.96
+  },
+  "selected_tools": [
+    "get_kafka_status",
+    "search_application_logs"
+  ],
+  "evidence_ids": [
+    "evi_kafka_consumer_down_001_kafka",
+    "evi_kafka_consumer_down_001_log"
+  ],
+  "trace_summary": [
+    {
+      "sequence": 0,
+      "event_type": "incident_created",
+      "stage": "task_manager",
+      "summary": "Incident created and queued for structured diagnosis."
+    },
+    {
+      "sequence": 1,
+      "event_type": "context_built",
+      "stage": "context",
+      "summary": "Built bounded planner context."
+    },
+    {
+      "sequence": 2,
+      "event_type": "plan_created",
+      "stage": "planner",
+      "summary": "Created investigation plan version 1."
+    },
+    {
+      "sequence": 3,
+      "event_type": "tool_started",
+      "stage": "evidence_collector",
+      "summary": "Starting MCP tool get_kafka_status."
+    },
+    {
+      "sequence": 4,
+      "event_type": "tool_completed",
+      "stage": "evidence_collector",
+      "summary": "MCP tool get_kafka_status returned success observation."
+    },
+    {
+      "sequence": 5,
+      "event_type": "evidence_added",
+      "stage": "context",
+      "summary": "Kafka group hmdp-seckill-order-create-v1 state=empty, members=0, total_lag=50000, lag_status=abnormal."
+    },
+    {
+      "sequence": 6,
+      "event_type": "context_built",
+      "stage": "context",
+      "summary": "Built bounded reflection context."
+    },
+    {
+      "sequence": 7,
+      "event_type": "hypothesis_updated",
+      "stage": "reflection",
+      "summary": "Kafka Evidence 显示无活跃消费者且存在积压；继续检查应用日志以取得独立证据。"
+    },
+    {
+      "sequence": 8,
+      "event_type": "reflection_completed",
+      "stage": "reflection",
+      "summary": "Reflection selected replan."
+    },
+    {
+      "sequence": 9,
+      "event_type": "context_built",
+      "stage": "context",
+      "summary": "Built bounded planner context."
+    },
+    {
+      "sequence": 10,
+      "event_type": "plan_created",
+      "stage": "planner",
+      "summary": "Created investigation plan version 2."
+    },
+    {
+      "sequence": 11,
+      "event_type": "tool_started",
+      "stage": "evidence_collector",
+      "summary": "Starting MCP tool search_application_logs."
+    },
+    {
+      "sequence": 12,
+      "event_type": "tool_completed",
+      "stage": "evidence_collector",
+      "summary": "MCP tool search_application_logs returned success observation."
+    },
+    {
+      "sequence": 13,
+      "event_type": "evidence_added",
+      "stage": "context",
+      "summary": "Application log search returned 1 event(s) with completeness=complete."
+    },
+    {
+      "sequence": 14,
+      "event_type": "context_built",
+      "stage": "context",
+      "summary": "Built bounded reflection context."
+    },
+    {
+      "sequence": 15,
+      "event_type": "hypothesis_updated",
+      "stage": "reflection",
+      "summary": "Kafka lag、零活跃成员与 consumer stopped 日志相互印证。"
+    },
+    {
+      "sequence": 16,
+      "event_type": "reflection_completed",
+      "stage": "reflection",
+      "summary": "Reflection selected report."
+    },
+    {
+      "sequence": 17,
+      "event_type": "report_generated",
+      "stage": "reporter",
+      "summary": "Kafka 消费者无活跃成员，消息持续积压；应用日志同时记录 consumer stopped unexpectedly。"
+    }
+  ],
+  "metrics": {
+    "passed": true,
+    "root_cause_accuracy": {
+      "score": 1.0,
+      "matched": true,
+      "expected": "Kafka消费者不可用导致消息积压",
+      "actual": "Kafka消费者不可用导致消息积压"
+    },
+    "evidence_coverage": {
+      "score": 1.0,
+      "expected": [
+        "kafka_no_active_members_with_lag",
+        "consumer_stopped_log"
+      ],
+      "observed": [
+        "consumer_stopped_log",
+        "get_kafka_status",
+        "kafka_consumer_status",
+        "kafka_no_active_members_with_lag",
+        "log",
+        "search_application_logs"
+      ],
+      "missing": []
+    },
+    "tool_efficiency": {
+      "score": 1.0,
+      "tool_call_count": 2,
+      "diagnosis_steps": 2,
+      "redundant_tool_calls": 0
+    },
+    "trace_completeness": {
+      "score": 1.0,
+      "required": [
+        "incident_created",
+        "plan_created",
+        "tool_started",
+        "tool_completed",
+        "evidence_added",
+        "hypothesis_updated",
+        "report_generated"
+      ],
+      "present": [
+        "incident_created",
+        "plan_created",
+        "tool_started",
+        "tool_completed",
+        "evidence_added",
+        "hypothesis_updated",
+        "report_generated"
+      ],
+      "missing": []
+    }
+  }
+}

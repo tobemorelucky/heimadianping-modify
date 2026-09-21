@@ -1,0 +1,14 @@
+{
+  "fault_id": "KAFKA_CONSUMER_DOWN_001",
+  "kafka": {
+    "topic": "hmdp.seckill.order.create.v1",
+    "consumer_group": "hmdp-seckill-order-create-v1",
+    "lag": 50000,
+    "member_count": 0,
+    "severity": "critical"
+  },
+  "log": {
+    "timestamp": "2026-09-19T10:15:00+08:00",
+    "message": "consumer stopped unexpectedly"
+  }
+}

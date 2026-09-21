@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "tools": [
+    {
+      "tool_name": "search_application_logs",
+      "description": "Search the allowlisted Spring Boot stdout and stderr log files. This tool is read-only and returns a structured evidence envelope.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "incident_id": {
+            "maxLength": 64,
+            "minLength": 5,
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "log_paths": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 2,
+            "minItems": 1,
+            "title": "Log Paths",
+            "type": "array"
+          },
+          "query": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Query"
+          },
+          "max_lines": {
+            "default": 200,
+            "maximum": 500,
+            "minimum": 1,
+            "title": "Max Lines",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "incident_id",
+          "log_paths"
+        ],
+        "title": "search_application_logsArguments"
+      },
+      "permission": "read:application_logs",
+      "server": "hmdp-readonly-tools",
+      "category": "observation",
+      "permission_level": "READ_ONLY",
+      "risk_level": "none",
+      "approval_required": false
+    },
+    {
+      "tool_name": "get_kafka_status",
+      "description": "Read Kafka topic, consumer-group membership, committed offsets, end offsets, and lag without consuming messages or changing Kafka state.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "topic": {
+            "anyOf": [
+              {
+                "maxLength": 249,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Topic"
+          },
+          "consumer_group": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9._-]+$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Consumer Group"
+          }
+        },
+        "title": "get_kafka_statusArguments"
+      },
+      "permission": "read:kafka_status",
+      "server": "hmdp-readonly-tools",
+      "category": "observation",
+      "permission_level": "READ_ONLY",
+      "risk_level": "none",
+      "approval_required": false
+    },
+    {
+      "tool_name": "get_business_metrics",
+      "description": "Derive bounded HMDP seckill request, Lua admission, Kafka send, and order creation counters from the allowlisted Spring runtime logs without querying Redis, MySQL, or arbitrary metric expressions.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "incident_id": {
+            "maxLength": 64,
+            "minLength": 5,
+            "title": "Incident Id",
+            "type": "string"
+          },
+          "max_lines": {
+            "default": 10000,
+            "maximum": 10000,
+            "minimum": 1,
+            "title": "Max Lines",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "incident_id"
+        ],
+        "title": "get_business_metricsArguments"
+      },
+      "permission": "read:business_metrics",
+      "server": "hmdp-readonly-tools",
+      "category": "observation",
+      "permission_level": "READ_ONLY",
+      "risk_level": "none",
+      "approval_required": false
+    }
+  ]
+}

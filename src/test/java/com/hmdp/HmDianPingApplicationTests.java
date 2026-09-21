@@ -4,6 +4,7 @@ import com.hmdp.entity.Shop;
 import com.hmdp.service.impl.ShopServiceImpl;
 import com.hmdp.utils.CacheClient;
 import com.hmdp.utils.RedisIdWorker;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.data.geo.Point;
@@ -24,6 +25,7 @@ import static com.hmdp.utils.RedisConstants.CACHE_SHOP_KEY;
 import static com.hmdp.utils.RedisConstants.SHOP_GEO_KEY;
 
 @SpringBootTest
+@Disabled("课程手工 Redis 演示集合：避免标准测试启动额外消费者并修改本地运行数据")
 class HmDianPingApplicationTests {
 
     @Resource
@@ -41,6 +43,7 @@ class HmDianPingApplicationTests {
     private ExecutorService es = Executors.newFixedThreadPool(500);
 
     @Test
+    @Disabled("课程手工压测：会批量推进真实 Redis 订单 ID，不应由 mvn test 自动执行")
     void testIdWorker() throws InterruptedException {
         CountDownLatch latch = new CountDownLatch(300);
 
@@ -61,12 +64,14 @@ class HmDianPingApplicationTests {
     }
 
     @Test
+    @Disabled("课程手工缓存预热：逻辑过期格式与当前缓存穿透查询模式不同")
     void testSaveShop() throws InterruptedException {
         Shop shop = shopService.getById(1L);
         cacheClient.setWithLogicalExpire(CACHE_SHOP_KEY + 1L, shop, 10L, TimeUnit.SECONDS);
     }
 
     @Test
+    @Disabled("课程手工 GEO 初始化：会写入真实 Redis，不应由 mvn test 自动执行")
     void loadShopData() {
         // 1.查询店铺信息
         List<Shop> list = shopService.list();
@@ -93,6 +98,7 @@ class HmDianPingApplicationTests {
     }
 
     @Test
+    @Disabled("课程手工 HyperLogLog 演示：会写入真实 Redis，不应由 mvn test 自动执行")
     void testHyperLogLog() {
         String[] values = new String[1000];
         int j = 0;

@@ -1,0 +1,17 @@
+{
+  "fault_id": "KAFKA_CONSUMER_DOWN_001",
+  "name": "秒杀订单异步创建延迟",
+  "description": "秒杀请求已受理，但异步订单创建持续延迟。",
+  "trigger_condition": "Kafka 消费者组无活跃成员，同时待消费消息持续积压。",
+  "expected_root_cause": "Kafka消费者不可用导致消息积压",
+  "expected_tools": [
+    "get_kafka_status",
+    "search_application_logs"
+  ],
+  "expected_evidence": [
+    "kafka_no_active_members_with_lag",
+    "consumer_stopped_log"
+  ],
+  "incident_title": "秒杀订单延迟，请分析原因",
+  "incident_description": "秒杀请求成功后订单长时间未创建，请调查异步链路。"
+}

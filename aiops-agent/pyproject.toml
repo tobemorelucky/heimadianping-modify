@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hmdp-aiops-agent"
+version = "0.1.0"
+description = "Local, read-only Agent Harness skeleton for HMDP incident diagnosis"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "httpx>=0.27,<1.0",
+    "kafka-python>=2.2.10,<3.0",
+    "mcp>=2.0,<3.0",
+    "pydantic>=2.7,<3.0",
+    "python-dotenv>=1.0,<2.0",
+    "uvicorn[standard]>=0.30,<1.0",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0,<10.0",
+]
+
+[tool.setuptools]
+py-modules = ["config", "tool_contracts"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["api*", "context*", "mcp_tools*", "runtime*", "memory*", "trace*", "evaluation*", "llm*", "monitoring*", "incident*", "governance*", "skills*"]
+exclude = ["tests*"]
+
+[tool.setuptools.package-data]
+skills = ["*/SKILL.md", "*/references/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "incident/tests", "governance/tests", "skills/tests"]
+addopts = "-q"
