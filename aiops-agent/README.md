@@ -146,6 +146,33 @@ Incident: 秒杀业务链路订单创建下降
 
 Business Metrics 只能定位链路阶段，不能单独证明 Consumer 或 MySQL 是根因。当前没有 MySQL Tool，因此报告必须保留该证据缺口。
 
+## Evidence-grounded Hypothesis Ledger（Phase D2）
+
+每次 Incident 诊断都会创建一个仅存在于当前 Runtime run 的 `HypothesisLedger`。它不是长期 Memory，也不跨 Incident 检索。Planner 创建调查假设后，Ledger 显式维护：
+
+- `UNKNOWN`：尚无足够 Evidence。
+- `SUPPORTED`：存在支持当前假设的 Evidence。
+- `CONTRADICTED`：当前 Evidence 反驳假设。
+- `REJECTED`：假设被调查流程明确排除。
+
+每个 Hypothesis 保存置信度、支持 Evidence ID、反驳 Evidence ID以及创建和更新时间。Evidence ID 由 Runtime 根据实际 Tool Observation 本地绑定，模型不能自行生成或修改引用。
+
+```text
+Planner hypothesis
+  -> hypothesis_created: UNKNOWN
+  -> MCP Observation
+  -> ContextPacket.current_hypotheses + EvidenceCard
+  -> Reflection
+  -> Runtime binds current evidence_id
+  -> hypothesis_updated: SUPPORTED / CONTRADICTED / REJECTED
+  -> next Planner receives ranked hypotheses
+  -> Diagnosis Report.final_hypothesis
+```
+
+例如，业务指标显示请求、Lua 和 Kafka 发送正常而订单创建下降时，只能支持“异常位于下游”的假设；随后 Kafka `member_count=0` 和 Consumer stopped 日志可以共同支持 Kafka Consumer 假设。若业务指标全链路一致，则对应的链路下降假设会记录为 `CONTRADICTED`，而不是被静默丢弃。
+
+Ledger 变化通过 `hypothesis_created` 和 `hypothesis_updated` Trace 审计。Trace 只记录状态、置信度与 Evidence 引用，不记录模型隐式思维链。最终 Hypothesis 同时写入 Diagnosis Report 和本地 Incident SQLite 报告记录。
+
 ## Continuous Monitoring（Phase M1 + M2 + M3）
 
 Monitoring 使用独立进程运行持久化 Scheduler。Phase M1 负责只读采集，Phase M2 在 Observation 入库后执行确定性规则，Phase M3 将新 AnomalySignal 转换为 Incident 并调用现有 Agent Runtime。当前只注册一个 `get_kafka_status` 采集计划和 `kafka-consumer-down-v1` 规则，不包含 Redis、MySQL、Elasticsearch 或 Action Tool。
@@ -324,7 +351,8 @@ Incident + selected Skill + bounded ContextPacket + Registry-authorized Tool Man
   -> Stdio MCP Client -> MCP Server -> business metrics, Kafka status, or log search
   -> success/partial/error/timeout Observation -> generic Evidence -> SQLite
   -> Context Manager -> ranked/deduplicated EvidenceCards
-  -> Reflection Provider + bounded ContextPacket -> strict decision JSON
+  -> Reflection Provider + bounded ContextPacket + current hypotheses -> strict decision JSON
+  -> Hypothesis Ledger -> evidence-grounded status/confidence update
   -> Reporter Provider + Evidence + Trace -> strict report JSON -> Pydantic validation
   -> SQLite + awaiting_human
 ```
@@ -382,6 +410,7 @@ aiops-agent/
 │   └── detector/ # DetectionRule、连续窗口 Detector 和 Signal Store
 ├── incident/     # Signal 去重、主动 Incident、Runtime 触发和独立 Trace
 ├── governance/   # Action Proposal、静态策略和 Permission Gateway
+├── reasoning/    # Incident 内 Hypothesis 模型和 Evidence-grounded Ledger
 ├── skills/       # metadata-only Registry、按需 Loader 和领域排障 Skill
 │   ├── incident-triage/
 │   └── kafka-consumer-diagnosis/
@@ -396,6 +425,35 @@ aiops-agent/
 └── tests/        # 启动、SQLite 和 Schema 测试
 ```
 
+## AIOps Console（Phase UI1）
+
+仓库根目录新增独立 `aiops-console/`（Vue 3 + Vite）。它只使用以下只读接口，不访问 SQLite：
+
+- `GET /api/incidents`：Runtime 与主动 Incident Manager 的合并列表。
+- `GET /api/incidents/{id}`：Incident、按生命周期和各 Trace 流序列合并的轨迹、Evidence 摘要、Hypothesis 置信度历史、Report 和已记录的 Proposal / Permission 结果。
+- `GET /api/monitoring/summary`：最近一次巡检、健康摘要与 Active Incident 数量。
+
+API 只返回有界 Evidence 摘要与白名单事实，不暴露原始日志或工具 Observation 数据。Console 的 Proposal 页面没有审批或执行功能。现有 `/incidents` 诊断入口、Planner、Reflection 和 MCP 工具均保持不变。
+
+Windows 演示启动：
+
+```powershell
+cd aiops-agent
+.\.venv\Scripts\python.exe -m evaluation.console_demo --database ./data/console-demo.db
+$env:AIOPS_DATABASE_PATH = './data/console-demo.db'
+.\.venv\Scripts\python.exe -m uvicorn api.main:app --host 127.0.0.1 --port 8010
+```
+
+另开 PowerShell：
+
+```powershell
+cd aiops-console
+npm install
+npm run dev
+```
+
+访问 `http://127.0.0.1:5173`，进入 Kafka Incident，可查看 `故障 Fixture → Incident → Agent 诊断 → Report → Proposal（仅展示）`。不运行演示种子时，空库 Dashboard 显示 Healthy。更多说明见 `aiops-console/README.md`。
+
 ## 安全边界
 
 - 服务默认只监听 `127.0.0.1`。
@@ -405,6 +463,7 @@ aiops-agent/
 - Phase M3 会从确定性 Signal 自动创建只读诊断 Incident；外部状态仍保持只读。
 - Phase G1 可以生成低风险 Action Proposal 并执行权限检查，但没有审批接口或执行器。
 - Phase S1 Skill 只向 Planner 提供领域调查指导，不执行工具、不作为 Evidence，也不进入 Reflection 判断。
+- Phase D2 Ledger 仅维护当前 Incident 的短期假设状态，不提供长期 Memory、向量检索或跨事故学习。
 - Incident Manager 只触发既有诊断 Runtime，不包含任何自动修复或状态变更工具。
 - HIGH_RISK_ACTION 始终拒绝；没有 Kubernetes、服务重启、数据删除或任意命令执行路径。
 - 外部 LLM 只在显式设置 `AI_MODEL_PROVIDER=openai_compatible` 时调用。

@@ -1,0 +1,114 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest'
+import { flushPromises, mount } from '@vue/test-utils'
+import Dashboard from './Dashboard.vue'
+import IncidentDetail from './IncidentDetail.vue'
+import Proposal from './Proposal.vue'
+import { getIncident, getMonitoringSummary, listIncidents } from '../api/client.js'
+
+vi.mock('../api/client.js', () => ({
+  getIncident: vi.fn(),
+  getMonitoringSummary: vi.fn(),
+  listIncidents: vi.fn(),
+  isAgentOffline: error => !error?.response || error.response.status >= 500
+}))
+
+const routerLink = { template: '<a><slot /></a>' }
+
+beforeEach(() => vi.clearAllMocks())
+
+describe('AIOps Console', () => {
+  it('shows Healthy when there are no incidents', async () => {
+    getMonitoringSummary.mockResolvedValue({ health: 'healthy', active_incident_count: 0, last_inspection_at: null })
+    listIncidents.mockResolvedValue([])
+    const wrapper = mount(Dashboard, { global: { stubs: { RouterLink: routerLink } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Healthy')
+    expect(wrapper.text()).toContain('当前没有 Incident')
+    expect(wrapper.text()).toContain('尚无持续巡检记录')
+  })
+
+  it('shows Agent Offline instead of stale Dashboard data when the API is down', async () => {
+    getMonitoringSummary.mockRejectedValue(new Error('connection refused'))
+    listIncidents.mockRejectedValue(new Error('connection refused'))
+    const wrapper = mount(Dashboard, { global: { stubs: { RouterLink: routerLink } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Agent Offline')
+    expect(wrapper.text()).not.toContain('Healthy')
+    expect(wrapper.find('button').exists()).toBe(true)
+  })
+
+  it('recovers from Agent Offline after retry', async () => {
+    getMonitoringSummary.mockRejectedValueOnce(new Error('connection refused'))
+      .mockResolvedValueOnce({ health: 'healthy', active_incident_count: 0, last_inspection_at: null })
+    listIncidents.mockRejectedValueOnce(new Error('connection refused')).mockResolvedValueOnce([])
+    const wrapper = mount(Dashboard, { global: { stubs: { RouterLink: routerLink } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Agent Offline')
+    await wrapper.find('.offline-panel button').trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('Healthy')
+    expect(wrapper.text()).not.toContain('Agent Offline')
+  })
+
+  it('renders Kafka timeline, evidence, skill, and confidence changes', async () => {
+    getIncident.mockResolvedValue({
+      incident_id: 'inc_kafka_demo', title: '秒杀订单延迟', description: 'Kafka lag',
+      status: 'RESOLVED', severity: 'high', runtime_status: 'awaiting_human',
+      created_at: '2026-09-19T04:00:00Z', trigger_signal_ids: ['sig_demo'],
+      traces: [
+        { event_id: 't1', event_type: 'skill_selected', created_at: '2026-09-19T04:00:00Z', summary: 'Selected Kafka skill', payload: { skill_id: 'kafka-consumer-diagnosis', version: '1.0' } },
+        { event_id: 't2', event_type: 'skill_loaded', created_at: '2026-09-19T04:00:01Z', summary: 'Loaded Kafka skill', payload: { skill_id: 'kafka-consumer-diagnosis' } },
+        { event_id: 't3', event_type: 'tool_called', created_at: '2026-09-19T04:00:02Z', summary: 'Called Kafka tool', payload: { tool_name: 'get_kafka_status' } },
+        { event_id: 't4', event_type: 'evidence_created', created_at: '2026-09-19T04:00:03Z', summary: 'Kafka lag 50000', payload: { evidence_id: 'evi_kafka' } }
+      ],
+      evidence: [{ evidence_id: 'evi_kafka_status_001', kind: 'kafka_consumer_status', source: 'hmdp.kafka', source_tool: 'get_kafka_status', status: 'success', summary: 'No active consumers', facts: ['member_count: 0', 'total_lag: 50000'], collected_at: '2026-09-19T04:00:03Z' }],
+      hypotheses: [{ hypothesis_id: 'hyp_kafka_001', description: 'Kafka consumer unavailable', status: 'SUPPORTED', confidence: 0.96, supporting_evidence_refs: ['evi_kafka'], contradicting_evidence_refs: [], history: [{ status: 'UNKNOWN', confidence: 0 }, { status: 'SUPPORTED', confidence: 0.96 }] }],
+      report: { status: 'confirmed', root_cause: 'Kafka consumer unavailable', conclusion: 'Consumer group has no members', confidence: 0.96 },
+      proposals: []
+    })
+    const wrapper = mount(IncidentDetail, { props: { id: 'inc_kafka_demo' }, global: { stubs: { RouterLink: routerLink } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('kafka-consumer-diagnosis')
+    expect(wrapper.text()).toContain('get_kafka_status')
+    expect(wrapper.text()).toContain('member_count: 0')
+    expect(wrapper.text()).toContain('UNKNOWN 0%')
+    expect(wrapper.text()).toContain('SUPPORTED 96%')
+    await wrapper.find('button[aria-pressed="false"]').trigger('click')
+    expect(wrapper.text()).toContain('Agent Run Replay')
+    expect(wrapper.text()).toContain('0 / 4 EVENTS')
+  })
+
+  it('shows Agent Offline on Incident Detail when the API is unreachable', async () => {
+    getIncident.mockRejectedValue(new Error('connection refused'))
+    const wrapper = mount(IncidentDetail, { props: { id: 'inc_kafka_demo' }, global: { stubs: { RouterLink: routerLink } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Agent Offline')
+    expect(wrapper.text()).not.toContain('根因尚未确认')
+  })
+
+  it('distinguishes a missing Incident from an offline Agent', async () => {
+    getIncident.mockRejectedValue({ response: { status: 404 } })
+    const wrapper = mount(IncidentDetail, { props: { id: 'inc_missing' }, global: { stubs: { RouterLink: routerLink } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('此 Incident 不存在')
+    expect(wrapper.text()).not.toContain('Agent Offline')
+  })
+
+  it('displays a proposal without an execution control', async () => {
+    getIncident.mockResolvedValue({
+      proposals: [{ proposal_id: 'proposal_demo', action_name: 'restart_consumer', reason: 'Kafka consumer unavailable', evidence_refs: ['evi_kafka_status_001'], risk_level: 'low', approval_required: true, permission_result: 'REQUIRE_APPROVAL' }]
+    })
+    const wrapper = mount(Proposal, { props: { id: 'inc_kafka_demo' }, global: { stubs: { RouterLink: routerLink } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('restart_consumer')
+    expect(wrapper.text()).toContain('REQUIRE_APPROVAL')
+    expect(wrapper.find('button').exists()).toBe(false)
+  })
+
+  it('shows Agent Offline on Proposal when the API is unreachable', async () => {
+    getIncident.mockRejectedValue(new Error('connection refused'))
+    const wrapper = mount(Proposal, { props: { id: 'inc_kafka_demo' }, global: { stubs: { RouterLink: routerLink } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Agent Offline')
+  })
+})

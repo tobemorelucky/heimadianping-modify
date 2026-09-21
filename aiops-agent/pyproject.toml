@@ -28,12 +28,12 @@ py-modules = ["config", "tool_contracts"]
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["api*", "context*", "mcp_tools*", "runtime*", "memory*", "trace*", "evaluation*", "llm*", "monitoring*", "incident*", "governance*", "skills*"]
+include = ["api*", "context*", "mcp_tools*", "runtime*", "memory*", "trace*", "evaluation*", "llm*", "monitoring*", "incident*", "governance*", "skills*", "reasoning*"]
 exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 skills = ["*/SKILL.md", "*/references/*.md"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "incident/tests", "governance/tests", "skills/tests"]
+testpaths = ["tests", "incident/tests", "governance/tests", "skills/tests", "reasoning/tests"]
 addopts = "-q"

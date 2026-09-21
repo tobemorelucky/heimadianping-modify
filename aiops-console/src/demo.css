@@ -1,0 +1,13 @@
+.incident-original-title {
+  display: block;
+  max-width: 740px;
+  margin-top: 10px;
+  color: #738198;
+  font: 11px 'DM Mono', Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.incident-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+.incident-actions .ghost-button { white-space: nowrap; }

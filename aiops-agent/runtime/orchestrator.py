@@ -10,6 +10,8 @@ from context.packet import ContextPacket, ContextStage
 from llm.mock import MockLLMProvider
 from llm.provider import StructuredLLMProvider
 from memory.database import SQLiteDatabase
+from reasoning.ledger import HypothesisLedger
+from reasoning.models import Hypothesis, HypothesisStatus
 from runtime.evidence import Evidence
 from runtime.mcp_client import MCPClientProtocol
 from runtime.models import IncidentCreate, IncidentStatus, IncidentTask
@@ -103,6 +105,7 @@ class RuntimeOrchestrator:
         reflection_count = 0
         tool_call_count = 0
         selected_skill: SkillContext | None = None
+        hypothesis_ledger = HypothesisLedger()
 
         try:
             self.database.update_incident_status(
@@ -165,6 +168,7 @@ class RuntimeOrchestrator:
                 stage=ContextStage.PLANNER,
                 record=record,
                 selected_skill=selected_skill,
+                current_hypotheses=hypothesis_ledger.rank(),
             )
             plan = self.planner.create_plan(
                 incident,
@@ -173,6 +177,11 @@ class RuntimeOrchestrator:
                 version=1,
             )
             self._save_plan(plan, record)
+            current_hypothesis = self._register_plan_hypothesis(
+                hypothesis_ledger,
+                plan,
+                record,
+            )
 
             final_reflection: ReflectionResult | None = None
 
@@ -284,28 +293,18 @@ class RuntimeOrchestrator:
                     stage=ContextStage.REFLECTION,
                     record=record,
                     latest_evidence_id=evidence.evidence_id,
+                    current_hypotheses=hypothesis_ledger.rank(),
                 )
                 reflection = self.reflection_engine.evaluate(
                     plan.hypothesis,
                     reflection_context,
                 )
-                hypothesis_id = f"hypothesis_{step.tool_name}"
-                self.database.save_hypothesis(
-                    incident.incident_id,
-                    hypothesis_id,
+                current_hypothesis = self._update_hypothesis(
+                    hypothesis_ledger,
+                    current_hypothesis,
+                    evidence,
                     reflection,
-                )
-                record(
-                    TraceEventType.HYPOTHESIS_UPDATED,
-                    "reflection",
-                    reflection.reason,
-                    payload={
-                        "hypothesis_id": hypothesis_id,
-                        "hypothesis": reflection.hypothesis,
-                        "hypothesis_status": reflection.hypothesis_status,
-                        "decision": reflection.decision.value,
-                        "confidence": reflection.confidence,
-                    },
+                    record,
                 )
                 record(
                     TraceEventType.REFLECTION_COMPLETED,
@@ -331,6 +330,7 @@ class RuntimeOrchestrator:
                         stage=ContextStage.PLANNER,
                         record=record,
                         selected_skill=selected_skill,
+                        current_hypotheses=hypothesis_ledger.rank(),
                     )
                     plan = self.planner.create_plan(
                         incident,
@@ -339,6 +339,11 @@ class RuntimeOrchestrator:
                         version=plan.version + 1,
                     )
                     self._save_plan(plan, record)
+                    current_hypothesis = self._register_plan_hypothesis(
+                        hypothesis_ledger,
+                        plan,
+                        record,
+                    )
                     continue
 
                 final_reflection = reflection
@@ -352,6 +357,8 @@ class RuntimeOrchestrator:
                 final_reflection,
                 evidence_items,
                 self.database.list_trace_events(incident.incident_id),
+                hypothesis_ledger.rank(),
+                current_hypothesis,
             )
             self.database.save_report(report)
             record(
@@ -363,6 +370,11 @@ class RuntimeOrchestrator:
                     "status": report.status.value,
                     "root_cause": report.root_cause,
                     "evidence_ids": report.evidence_ids,
+                    "final_hypothesis_id": (
+                        report.final_hypothesis.hypothesis_id
+                        if report.final_hypothesis is not None
+                        else None
+                    ),
                 },
             )
             self.database.update_incident_status(
@@ -388,12 +400,14 @@ class RuntimeOrchestrator:
         record: Callable[..., None],
         latest_evidence_id: str | None = None,
         selected_skill: SkillContext | None = None,
+        current_hypotheses: tuple[Hypothesis, ...] = (),
     ) -> ContextPacket:
         packet = self.context_manager.build(
             evidence,
             stage=stage,
             latest_evidence_id=latest_evidence_id,
             selected_skill=selected_skill,
+            current_hypotheses=current_hypotheses,
         )
         record(
             TraceEventType.CONTEXT_BUILT,
@@ -408,6 +422,9 @@ class RuntimeOrchestrator:
                     else None
                 ),
                 "selected_evidence_ids": list(packet.selected_evidence_ids),
+                "current_hypothesis_ids": [
+                    item.hypothesis_id for item in packet.current_hypotheses
+                ],
                 "excluded": [
                     item.model_dump(mode="json") for item in packet.excluded
                 ],
@@ -433,6 +450,96 @@ class RuntimeOrchestrator:
                 "action": plan.action.model_dump(mode="json"),
             },
         )
+
+    def _register_plan_hypothesis(
+        self,
+        ledger: HypothesisLedger,
+        plan: InvestigationPlan,
+        record: Callable[..., None],
+    ) -> Hypothesis:
+        existing_ids = {item.hypothesis_id for item in ledger.rank()}
+        hypothesis = ledger.create(plan.hypothesis)
+        if hypothesis.hypothesis_id not in existing_ids:
+            self.database.save_hypothesis(
+                plan.incident_id,
+                hypothesis,
+                "Created from an InvestigationPlan before Evidence collection.",
+            )
+            record(
+                TraceEventType.HYPOTHESIS_CREATED,
+                "reasoning",
+                hypothesis.description,
+                payload={
+                    "hypothesis_id": hypothesis.hypothesis_id,
+                    "status": hypothesis.status.value,
+                    "confidence": hypothesis.confidence,
+                    "plan_id": plan.plan_id,
+                    "plan_version": plan.version,
+                },
+            )
+        return hypothesis
+
+    def _update_hypothesis(
+        self,
+        ledger: HypothesisLedger,
+        hypothesis: Hypothesis,
+        evidence: Evidence,
+        reflection: ReflectionResult,
+        record: Callable[..., None],
+    ) -> Hypothesis:
+        updated = ledger.update(
+            hypothesis.hypothesis_id,
+            description=reflection.hypothesis,
+            confidence=reflection.confidence,
+        )
+        reflection_status = reflection.hypothesis_status.casefold()
+        if reflection_status in {"supports", "supported", "verified"}:
+            updated = ledger.add_supporting_evidence(
+                updated.hypothesis_id,
+                evidence.evidence_id,
+                confidence=reflection.confidence,
+            )
+        elif reflection_status in {
+            "contradicts",
+            "contradicted",
+            "rejected",
+        }:
+            updated = ledger.add_contradicting_evidence(
+                updated.hypothesis_id,
+                evidence.evidence_id,
+                confidence=reflection.confidence,
+            )
+            if reflection_status == "rejected":
+                updated = ledger.update(
+                    updated.hypothesis_id,
+                    status=HypothesisStatus.REJECTED,
+                    confidence=reflection.confidence,
+                )
+        self.database.save_hypothesis(
+            evidence.incident_id,
+            updated,
+            reflection.reason,
+        )
+        record(
+            TraceEventType.HYPOTHESIS_UPDATED,
+            "reflection",
+            reflection.reason,
+            payload={
+                "hypothesis_id": updated.hypothesis_id,
+                "hypothesis": updated.description,
+                "status": updated.status.value,
+                "reflection_status": reflection.hypothesis_status,
+                "decision": reflection.decision.value,
+                "confidence": updated.confidence,
+                "supporting_evidence_refs": list(
+                    updated.supporting_evidence_refs
+                ),
+                "contradicting_evidence_refs": list(
+                    updated.contradicting_evidence_refs
+                ),
+            },
+        )
+        return updated
 
     @staticmethod
     def _budget_exhausted_reflection() -> ReflectionResult:

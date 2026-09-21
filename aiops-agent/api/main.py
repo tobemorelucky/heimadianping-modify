@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 
+from api.console import ConsoleReader
 from api.schemas import HealthResponse, IncidentCreatedResponse, IncidentRequest
 from config import Settings, get_settings
 from llm.factory import build_llm_provider
@@ -40,6 +41,7 @@ def create_app(
         database.initialize()
         application.state.settings = selected_settings
         application.state.database = database
+        application.state.console_reader = ConsoleReader(database)
         application.state.llm_provider = provider
         application.state.orchestrator = RuntimeOrchestrator(
             database,
@@ -73,6 +75,21 @@ def create_app(
         orchestrator: RuntimeOrchestrator = request.app.state.orchestrator
         result = orchestrator.run(incident_request.to_runtime_request())
         return IncidentCreatedResponse(incident_id=result.incident_id)
+
+    @application.get("/api/incidents")
+    def list_console_incidents(request: Request) -> list[dict]:
+        return request.app.state.console_reader.list_incidents()
+
+    @application.get("/api/incidents/{incident_id}")
+    def get_console_incident(incident_id: str, request: Request) -> dict:
+        incident = request.app.state.console_reader.get_incident(incident_id)
+        if incident is None:
+            raise HTTPException(status_code=404, detail="Incident not found")
+        return incident
+
+    @application.get("/api/monitoring/summary")
+    def get_console_monitoring_summary(request: Request) -> dict:
+        return request.app.state.console_reader.monitoring_summary()
 
     return application
 

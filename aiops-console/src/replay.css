@@ -1,0 +1,28 @@
+.replay-panel { padding: 26px; }
+.replay-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 9px; }
+.replay-controls .ghost-button:disabled { opacity: .42; cursor: not-allowed; }
+.replay-controls .replay-primary { background: #554891; color: #fff; border-color: #8271c6; min-width: 92px; }
+.replay-progress-label { margin-left: auto; color: #a99be9; font: 11px 'DM Mono', Consolas, monospace; }
+.replay-progress { height: 5px; background: #29334a; border-radius: 4px; overflow: hidden; margin: 14px 0 8px; }
+.replay-progress span { display: block; height: 100%; background: linear-gradient(90deg, #6b88d7, #a88bf7); transition: width .25s ease; }
+.replay-note { color: #8594ab; font-size: 11px; line-height: 1.5; margin: 0 0 20px; }
+.replay-current { padding: 17px 20px; border: 1px solid #544b7a; border-left: 3px solid #a18cf4; border-radius: 8px; background: #211f35; margin-bottom: 20px; }
+.replay-current h3 { margin: 5px 0 7px; text-transform: capitalize; font-size: 16px; }
+.replay-current p { color: #d3d8e8; font-size: 13px; line-height: 1.6; margin: 0 0 7px; }
+.replay-current time { color: #8b96aa; font: 10px 'DM Mono', Consolas, monospace; }
+.replay-start { padding: 20px 0 25px; }
+.replay-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(300px, 1fr); gap: 18px; align-items: start; }
+.replay-subpanel { margin: 0; padding: 19px; background: #111827; }
+.replay-subpanel .section-head { margin-bottom: 15px; }
+.replay-timeline { max-height: 730px; overflow-y: auto; padding-right: 7px; }
+.replay-facts { display: grid; gap: 13px; }
+.replay-facts > .panel > .eyebrow { display: block; margin-bottom: 14px; color: #a294e8; }
+.replay-facts .data-card { padding: 13px; }
+.replay-hypotheses { display: grid; gap: 11px; }
+.replay-hypotheses div { padding-top: 10px; border-top: 1px solid #29354a; }
+.replay-hypotheses div:first-child { border-top: 0; padding-top: 0; }
+.replay-hypotheses strong { display: block; color: #d9e0eb; font-size: 12px; line-height: 1.5; }
+.replay-hypotheses span { display: block; color: #a897f0; font: 11px 'DM Mono', Consolas, monospace; margin-top: 5px; }
+.replay-text { color: #bac6d5; font-size: 12px; line-height: 1.65; margin: 0; }
+.replay-subpanel h3 { font-size: 14px; margin: 0 0 8px; }
+@media(max-width: 1000px) { .replay-grid { grid-template-columns: 1fr; } .replay-timeline { max-height: 470px; } }

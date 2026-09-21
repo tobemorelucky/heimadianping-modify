@@ -1,0 +1,24 @@
+.offline-panel {
+  max-width: 610px;
+  margin: 24px auto;
+  padding: 42px;
+  text-align: center;
+  border-color: #6b4d52;
+  background: linear-gradient(150deg, #251d2b, #171d2c);
+}
+
+.offline-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 18px;
+  border: 1px solid #a36b6b;
+  border-radius: 50%;
+  color: #f3aaa3;
+  font: 700 24px Manrope, sans-serif;
+}
+
+.offline-panel h2 { margin: 10px 0; font-size: 27px; }
+.offline-panel p { color: #aeb8c9; line-height: 1.7; font-size: 13px; }
+.offline-panel button { margin-top: 11px; }

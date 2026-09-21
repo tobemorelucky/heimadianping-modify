@@ -73,6 +73,9 @@ CREATE TABLE IF NOT EXISTS hypotheses (
     status TEXT NOT NULL,
     reason TEXT NOT NULL,
     confidence REAL NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
+    supporting_evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+    contradicting_evidence_refs_json TEXT NOT NULL DEFAULT '[]',
+    created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (incident_id) REFERENCES incidents (incident_id),
     UNIQUE (incident_id, hypothesis_id)
@@ -87,6 +90,7 @@ CREATE TABLE IF NOT EXISTS reports (
     root_cause TEXT,
     confidence REAL NOT NULL CHECK (confidence >= 0.0 AND confidence <= 1.0),
     evidence_ids_json TEXT NOT NULL,
+    final_hypothesis_json TEXT,
     generated_at TEXT NOT NULL,
     FOREIGN KEY (incident_id) REFERENCES incidents (incident_id)
 );

@@ -9,6 +9,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from context.cards import EvidenceCard
+from reasoning.models import Hypothesis
 from skills.models import SkillContext
 
 
@@ -48,6 +49,10 @@ class ContextPacket(BaseModel):
     stage: ContextStage
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     selected_skill: SkillContext | None = None
+    current_hypotheses: tuple[Hypothesis, ...] = Field(
+        default_factory=tuple,
+        max_length=16,
+    )
     evidence_cards: tuple[EvidenceCard, ...] = Field(default_factory=tuple)
     latest_observation: EvidenceCard | None = None
     selected_evidence_ids: tuple[str, ...] = Field(default_factory=tuple)
@@ -69,4 +74,7 @@ class ContextPacket(BaseModel):
             raise ValueError("reflection context requires the latest observation")
         if self.stage is ContextStage.REFLECTION and self.selected_skill is not None:
             raise ValueError("Skills are Planner guidance and cannot enter Reflection context")
+        hypothesis_ids = [item.hypothesis_id for item in self.current_hypotheses]
+        if len(hypothesis_ids) != len(set(hypothesis_ids)):
+            raise ValueError("ContextPacket cannot contain duplicate hypotheses")
         return self

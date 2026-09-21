@@ -5,6 +5,7 @@ from typing import Any, Mapping, Sequence
 from pydantic import BaseModel, ConfigDict, Field
 
 from llm.provider import StructuredLLMProvider
+from reasoning.models import Hypothesis
 from runtime.evidence import Evidence
 from runtime.reflection import ReflectionResult
 from runtime.reports import DiagnosisReport, DiagnosisStatus
@@ -34,6 +35,8 @@ class ReportGenerator:
         reflection: ReflectionResult,
         evidence: Sequence[Evidence],
         trace: Sequence[Mapping[str, Any]],
+        hypotheses: Sequence[Hypothesis],
+        final_hypothesis: Hypothesis | None,
     ) -> DiagnosisReport:
         output = self.provider.generate_structured(
             operation="report",
@@ -45,6 +48,14 @@ class ReportGenerator:
                 "incident_id": incident_id,
                 "hypothesis": reflection.hypothesis,
                 "reflection": reflection.model_dump(mode="json"),
+                "hypotheses": [
+                    item.model_dump(mode="json") for item in hypotheses
+                ],
+                "final_hypothesis_id": (
+                    final_hypothesis.hypothesis_id
+                    if final_hypothesis is not None
+                    else None
+                ),
                 "evidence": [item.model_dump(mode="json") for item in evidence],
                 "trace": list(trace),
             },
@@ -58,4 +69,5 @@ class ReportGenerator:
             root_cause=output.root_cause,
             confidence=output.confidence,
             evidence_ids=[item.evidence_id for item in evidence],
+            final_hypothesis=final_hypothesis,
         )

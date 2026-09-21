@@ -12,8 +12,8 @@ from typing import Any, Dict, Iterator, List
 from runtime.evidence import Evidence
 from runtime.models import IncidentStatus, IncidentTask
 from runtime.plans import InvestigationPlan
-from runtime.reflection import ReflectionResult
 from runtime.reports import DiagnosisReport
+from reasoning.models import Hypothesis
 from trace.models import AgentTraceEvent
 
 
@@ -51,6 +51,8 @@ class SQLiteDatabase:
             connection.execute("PRAGMA journal_mode = WAL")
             connection.executescript(schema)
             self._migrate_evidence_schema(connection)
+            self._migrate_hypothesis_schema(connection)
+            self._migrate_report_schema(connection)
 
     def healthcheck(self) -> bool:
         """Verify that SQLite is reachable and its base tables exist."""
@@ -184,8 +186,8 @@ class SQLiteDatabase:
     def save_hypothesis(
         self,
         incident_id: str,
-        hypothesis_id: str,
-        reflection: ReflectionResult,
+        hypothesis: Hypothesis,
+        reason: str,
     ) -> None:
         """Insert or update the latest state of one hypothesis."""
 
@@ -194,23 +196,29 @@ class SQLiteDatabase:
                 """
                 INSERT INTO hypotheses (
                     incident_id, hypothesis_id, statement, status,
-                    reason, confidence, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                    reason, confidence, supporting_evidence_refs_json,
+                    contradicting_evidence_refs_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT (incident_id, hypothesis_id) DO UPDATE SET
                     statement = excluded.statement,
                     status = excluded.status,
                     reason = excluded.reason,
                     confidence = excluded.confidence,
+                    supporting_evidence_refs_json = excluded.supporting_evidence_refs_json,
+                    contradicting_evidence_refs_json = excluded.contradicting_evidence_refs_json,
                     updated_at = excluded.updated_at
                 """,
                 (
                     incident_id,
-                    hypothesis_id,
-                    reflection.hypothesis,
-                    reflection.hypothesis_status,
-                    reflection.reason,
-                    reflection.confidence,
-                    datetime.now(timezone.utc).isoformat(),
+                    hypothesis.hypothesis_id,
+                    hypothesis.description,
+                    hypothesis.status.value,
+                    reason,
+                    hypothesis.confidence,
+                    json.dumps(hypothesis.supporting_evidence_refs, ensure_ascii=False),
+                    json.dumps(hypothesis.contradicting_evidence_refs, ensure_ascii=False),
+                    hypothesis.created_at.isoformat(),
+                    hypothesis.updated_at.isoformat(),
                 ),
             )
 
@@ -246,8 +254,9 @@ class SQLiteDatabase:
                 """
                 INSERT INTO reports (
                     report_id, incident_id, status, title, conclusion,
-                    root_cause, confidence, evidence_ids_json, generated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    root_cause, confidence, evidence_ids_json,
+                    final_hypothesis_json, generated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     report.report_id,
@@ -258,6 +267,11 @@ class SQLiteDatabase:
                     report.root_cause,
                     report.confidence,
                     json.dumps(report.evidence_ids, ensure_ascii=False),
+                    (
+                        report.final_hypothesis.model_dump_json()
+                        if report.final_hypothesis is not None
+                        else None
+                    ),
                     report.generated_at.isoformat(),
                 ),
             )
@@ -312,6 +326,16 @@ class SQLiteDatabase:
             ).fetchall()
         return [dict(row) for row in rows]
 
+    def list_hypotheses(self, incident_id: str) -> List[Dict[str, Any]]:
+        """Return the persisted current state of each incident hypothesis."""
+
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT * FROM hypotheses WHERE incident_id = ? ORDER BY created_at",
+                (incident_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     @staticmethod
     def list_tables(connection: sqlite3.Connection) -> List[str]:
         """Return application table names for health checks and tests."""
@@ -354,3 +378,38 @@ class SQLiteDatabase:
               AND completeness = 'unknown'
             """
         )
+
+    @staticmethod
+    def _migrate_hypothesis_schema(connection: sqlite3.Connection) -> None:
+        """Add Evidence-grounded Ledger fields to pre-D2 databases."""
+
+        existing = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(hypotheses)").fetchall()
+        }
+        additions = {
+            "supporting_evidence_refs_json": "TEXT NOT NULL DEFAULT '[]'",
+            "contradicting_evidence_refs_json": "TEXT NOT NULL DEFAULT '[]'",
+            "created_at": "TEXT",
+        }
+        for column, definition in additions.items():
+            if column not in existing:
+                connection.execute(
+                    f"ALTER TABLE hypotheses ADD COLUMN {column} {definition}"
+                )
+        connection.execute(
+            "UPDATE hypotheses SET created_at = updated_at WHERE created_at IS NULL"
+        )
+
+    @staticmethod
+    def _migrate_report_schema(connection: sqlite3.Connection) -> None:
+        """Persist the final incident-scoped hypothesis in Diagnosis Reports."""
+
+        existing = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(reports)").fetchall()
+        }
+        if "final_hypothesis_json" not in existing:
+            connection.execute(
+                "ALTER TABLE reports ADD COLUMN final_hypothesis_json TEXT"
+            )

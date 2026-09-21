@@ -9,6 +9,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from reasoning.models import Hypothesis
+
 
 class DiagnosisStatus(str, Enum):
     """Whether the fake evidence verified a root cause."""
@@ -30,6 +32,7 @@ class DiagnosisReport(BaseModel):
     root_cause: Optional[str] = Field(default=None, max_length=500)
     confidence: float = Field(ge=0.0, le=1.0)
     evidence_ids: List[str] = Field(default_factory=list)
+    final_hypothesis: Hypothesis | None = None
     generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
@@ -38,4 +41,3 @@ class DiagnosisRunResult(BaseModel):
 
     incident_id: str
     report: DiagnosisReport
-

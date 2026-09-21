@@ -19,6 +19,7 @@ from context.packet import (
 )
 from context.ranker import EvidenceRanker
 from runtime.evidence import Evidence
+from reasoning.models import Hypothesis
 from skills.models import SkillContext
 
 
@@ -66,6 +67,7 @@ class ContextManager:
         stage: ContextStage | str = ContextStage.PLANNER,
         latest_evidence_id: str | None = None,
         selected_skill: SkillContext | None = None,
+        current_hypotheses: Sequence[Hypothesis] = (),
     ) -> ContextPacket:
         stage = ContextStage(stage)
         if stage is ContextStage.REFLECTION and latest_evidence_id is None:
@@ -107,6 +109,12 @@ class ContextManager:
             estimated_chars += sum(
                 len(reference.content) for reference in selected_skill.references
             )
+        estimated_chars += sum(
+            len(item.description)
+            + sum(len(ref) for ref in item.supporting_evidence_refs)
+            + sum(len(ref) for ref in item.contradicting_evidence_refs)
+            for item in current_hypotheses
+        )
         budget = ContextBudget(
             max_evidence_cards=self.limits.max_evidence_cards,
             max_samples_per_card=self.limits.max_samples_per_card,
@@ -118,6 +126,7 @@ class ContextManager:
         return ContextPacket(
             stage=stage,
             selected_skill=selected_skill,
+            current_hypotheses=tuple(current_hypotheses),
             evidence_cards=tuple(packet_cards),
             latest_observation=latest_card,
             selected_evidence_ids=selected_ids,
