@@ -3,17 +3,24 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Mapping
 
 import pytest
 
 from memory.database import SQLiteDatabase
 from governance.models import ToolCategory
+from incident.manager import IncidentManager
+from incident.models import DiagnosisStatus as ManagedDiagnosisStatus, IncidentStatus
+from incident.store import IncidentStore
 from monitoring.collector import MonitoringCollector
+from monitoring.detector.detector import DeterministicAnomalyDetector
+from monitoring.detector.rules import kafka_consumer_down_rule
+from monitoring.detector.signal_store import SignalStore
 from monitoring.models import CollectionSchedule
 from monitoring.observation_store import ObservationStore
 from monitoring.scheduler import MonitoringScheduler
+from runtime.reports import DiagnosisReport, DiagnosisRunResult, DiagnosisStatus
 from runtime.tool_registry import (
     ToolManifest,
     ToolManifestEntry,
@@ -167,6 +174,67 @@ def test_scheduler_triggers_due_persisted_schedule(monitoring_store, registry):
         "monitoring_tick_started",
         "observation_collected",
     ]
+
+
+def test_scheduler_only_recovers_after_two_later_healthy_ticks(monitoring_store, registry):
+    current_time = [FIXED_TIME]
+    client = FakeMCPClient(registry)
+    collector = MonitoringCollector(
+        client, registry, monitoring_store, clock=lambda: current_time[0]
+    )
+    signal_store = SignalStore(monitoring_store.database)
+    signal_store.initialize()
+    signal_store.ensure_rule(kafka_consumer_down_rule(lag_threshold=1_000))
+    detector = DeterministicAnomalyDetector(monitoring_store, signal_store)
+    incident_store = IncidentStore(monitoring_store.database)
+    incident_store.initialize()
+
+    class DiagnosisStub:
+        def run(self, request, *, incident_id=None):
+            report = DiagnosisReport(
+                report_id="report_monitoring_recovery", incident_id=incident_id,
+                status=DiagnosisStatus.CONFIRMED, title="Kafka consumer down",
+                conclusion="No members; lag increasing", root_cause="Kafka consumer unavailable",
+                confidence=0.9, evidence_ids=["down_evidence"],
+            )
+            return DiagnosisRunResult(incident_id=incident_id, report=report)
+
+    manager = IncidentManager(
+        incident_store, DiagnosisStub(), clock=lambda: current_time[0]
+    )
+    scheduler = MonitoringScheduler(
+        monitoring_store, collector, detector=detector,
+        incident_manager=manager, clock=lambda: current_time[0],
+    )
+    scheduler.add_schedule(schedule())
+
+    def tick(offset: int, *, members: int, lag: int) -> None:
+        current_time[0] = FIXED_TIME + timedelta(seconds=offset)
+        client.observation = kafka_observation().model_copy(update={
+            "data": {
+                "topic": "hmdp.seckill.order.create.v1",
+                "consumer_group": "hmdp-seckill-order-create-v1",
+                "member_count": members,
+                "total_lag": lag,
+                "topic_exists": True,
+                "offsets_complete": True,
+                "partitions_truncated": False,
+            }
+        })
+        assert len(scheduler.run_due()) == 1
+
+    tick(0, members=0, lag=50_000)
+    assert incident_store.list_incidents() == []
+    tick(30, members=0, lag=51_000)
+    incident = incident_store.list_incidents()[0]
+    assert incident.status is IncidentStatus.ACTIVE
+    assert incident.diagnosis_status is ManagedDiagnosisStatus.COMPLETED
+    tick(60, members=1, lag=20)
+    assert incident_store.get(incident.incident_id).status is IncidentStatus.ACTIVE
+    tick(90, members=1, lag=0)
+    recovered = incident_store.get(incident.incident_id)
+    assert recovered.status is IncidentStatus.RECOVERED
+    assert recovered.diagnosis_status is ManagedDiagnosisStatus.COMPLETED
 
 
 def test_collector_calls_existing_kafka_mcp_and_saves_evidence_ref(

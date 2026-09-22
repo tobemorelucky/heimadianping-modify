@@ -17,6 +17,7 @@ class TraceEventType(str, Enum):
     OBSERVATION_COLLECTED = "observation_collected"
     ANOMALY_DETECTED = "anomaly_detected"
     INCIDENT_CREATED = "incident_created"
+    INCIDENT_RECOVERED = "incident_recovered"
     SKILL_SELECTED = "skill_selected"
     SKILL_LOADED = "skill_loaded"
     DIAGNOSIS_STARTED = "diagnosis_started"

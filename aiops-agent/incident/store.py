@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any
 
 from incident.models import (
+    DiagnosisStatus,
     Incident,
     IncidentSeverity,
     IncidentStatus,
@@ -20,7 +21,10 @@ CREATE TABLE IF NOT EXISTS managed_incidents (
     incident_id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
     severity TEXT NOT NULL CHECK (severity IN ('critical', 'high', 'medium', 'low')),
-    status TEXT NOT NULL CHECK (status IN ('OPEN', 'DIAGNOSING', 'RESOLVED', 'FAILED')),
+    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'RECOVERED', 'ACKNOWLEDGED')),
+    diagnosis_status TEXT NOT NULL CHECK (
+        diagnosis_status IN ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED')
+    ),
     trigger_signal_ids_json TEXT NOT NULL,
     fingerprint TEXT NOT NULL,
     last_signal_at TEXT NOT NULL,
@@ -37,7 +41,8 @@ CREATE TABLE IF NOT EXISTS incident_manager_trace_events (
     incident_id TEXT NOT NULL,
     event_type TEXT NOT NULL CHECK (
         event_type IN (
-            'incident_created', 'diagnosis_started', 'diagnosis_completed',
+            'incident_created', 'incident_recovered',
+            'diagnosis_started', 'diagnosis_completed',
             'action_proposal_created', 'permission_checked'
         )
     ),
@@ -63,22 +68,24 @@ class IncidentStore:
         with self.database.connect() as connection:
             connection.executescript(INCIDENT_MANAGER_SCHEMA)
             self._migrate_incident_trace_event_types(connection)
+            self._migrate_incident_status_schema(connection)
 
     def create(self, incident: Incident) -> None:
         with self.database.connect() as connection:
             connection.execute(
                 """
                 INSERT INTO managed_incidents (
-                    incident_id, title, severity, status,
+                    incident_id, title, severity, status, diagnosis_status,
                     trigger_signal_ids_json, fingerprint, last_signal_at,
                     diagnosis_report_id, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     incident.incident_id,
                     incident.title,
                     incident.severity.value,
                     incident.status.value,
+                    incident.diagnosis_status.value,
                     json.dumps(incident.trigger_signal_ids, ensure_ascii=False),
                     incident.fingerprint,
                     incident.last_signal_at.isoformat(),
@@ -152,10 +159,10 @@ class IncidentStore:
             raise KeyError(f"managed incident not found after merge: {incident_id}")
         return merged
 
-    def update_status(
+    def update_diagnosis_status(
         self,
         incident_id: str,
-        status: IncidentStatus,
+        status: DiagnosisStatus,
         *,
         updated_at: datetime,
         diagnosis_report_id: str | None = None,
@@ -164,7 +171,7 @@ class IncidentStore:
             cursor = connection.execute(
                 """
                 UPDATE managed_incidents
-                SET status = ?, diagnosis_report_id = COALESCE(?, diagnosis_report_id),
+                SET diagnosis_status = ?, diagnosis_report_id = COALESCE(?, diagnosis_report_id),
                     updated_at = ?
                 WHERE incident_id = ?
                 """,
@@ -228,6 +235,7 @@ class IncidentStore:
             title=row["title"],
             severity=IncidentSeverity(row["severity"]),
             status=IncidentStatus(row["status"]),
+            diagnosis_status=DiagnosisStatus(row["diagnosis_status"]),
             trigger_signal_ids=tuple(json.loads(row["trigger_signal_ids_json"])),
             fingerprint=row["fingerprint"],
             last_signal_at=datetime.fromisoformat(row["last_signal_at"]),
@@ -246,7 +254,7 @@ class IncidentStore:
             WHERE type = 'table' AND name = 'incident_manager_trace_events'
             """
         ).fetchone()
-        if row is None or "action_proposal_created" in str(row[0]):
+        if row is None or "incident_recovered" in str(row[0]):
             return
         connection.executescript(
             """
@@ -258,7 +266,8 @@ class IncidentStore:
                 incident_id TEXT NOT NULL,
                 event_type TEXT NOT NULL CHECK (
                     event_type IN (
-                        'incident_created', 'diagnosis_started',
+                        'incident_created', 'incident_recovered',
+                        'diagnosis_started',
                         'diagnosis_completed', 'action_proposal_created',
                         'permission_checked'
                     )
@@ -278,3 +287,96 @@ class IncidentStore:
                 ON incident_manager_trace_events (incident_id, created_at);
             """
         )
+
+    def update_status(
+        self,
+        incident_id: str,
+        status: IncidentStatus,
+        *,
+        expected_status: IncidentStatus,
+        updated_at: datetime,
+    ) -> Incident:
+        """Change fault state without touching the independent diagnosis state."""
+
+        allowed = {
+            (IncidentStatus.ACTIVE, IncidentStatus.RECOVERED),
+            (IncidentStatus.RECOVERED, IncidentStatus.ACKNOWLEDGED),
+        }
+        if (expected_status, status) not in allowed:
+            raise ValueError("unsupported incident status transition")
+
+        with self.database.connect() as connection:
+            cursor = connection.execute(
+                """
+                UPDATE managed_incidents SET status = ?, updated_at = ?
+                WHERE incident_id = ? AND status = ?
+                """,
+                (status.value, updated_at.isoformat(), incident_id, expected_status.value),
+            )
+        if cursor.rowcount != 1:
+            raise ValueError("incident status transition rejected")
+        incident = self.get(incident_id)
+        if incident is None:
+            raise KeyError(f"managed incident not found after update: {incident_id}")
+        return incident
+
+    @staticmethod
+    def _migrate_incident_status_schema(connection: Any) -> None:
+        """Conservatively migrate pre-P2.3 rows without claiming recovery."""
+
+        columns = {
+            row["name"]
+            for row in connection.execute("PRAGMA table_info(managed_incidents)")
+        }
+        if "diagnosis_status" in columns:
+            return
+        connection.commit()
+        connection.execute("PRAGMA foreign_keys = OFF")
+        try:
+            connection.executescript(
+                """
+                BEGIN IMMEDIATE;
+                CREATE TABLE managed_incidents_p23 (
+                    incident_id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    severity TEXT NOT NULL CHECK (severity IN ('critical', 'high', 'medium', 'low')),
+                    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'RECOVERED', 'ACKNOWLEDGED')),
+                    diagnosis_status TEXT NOT NULL CHECK (
+                        diagnosis_status IN ('PENDING', 'RUNNING', 'COMPLETED', 'FAILED')
+                    ),
+                    trigger_signal_ids_json TEXT NOT NULL,
+                    fingerprint TEXT NOT NULL,
+                    last_signal_at TEXT NOT NULL,
+                    diagnosis_report_id TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                INSERT INTO managed_incidents_p23 (
+                    incident_id, title, severity, status, diagnosis_status,
+                    trigger_signal_ids_json, fingerprint, last_signal_at,
+                    diagnosis_report_id, created_at, updated_at
+                )
+                SELECT incident_id, title, severity, 'ACTIVE',
+                    CASE status
+                        WHEN 'DIAGNOSING' THEN 'RUNNING'
+                        WHEN 'RESOLVED' THEN 'COMPLETED'
+                        WHEN 'FAILED' THEN 'FAILED'
+                        ELSE 'PENDING'
+                    END,
+                    trigger_signal_ids_json, fingerprint, last_signal_at,
+                    diagnosis_report_id, created_at, updated_at
+                FROM managed_incidents;
+                DROP TABLE managed_incidents;
+                ALTER TABLE managed_incidents_p23 RENAME TO managed_incidents;
+                CREATE INDEX idx_managed_incidents_fingerprint_signal
+                    ON managed_incidents (fingerprint, last_signal_at);
+                COMMIT;
+                """
+            )
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.execute("PRAGMA foreign_keys = ON")
+        if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+            raise RuntimeError("incident schema migration broke a foreign key")

@@ -393,6 +393,16 @@ cd aiops-agent
 
 测试使用临时 SQLite 数据库，不会写入正式的 `data/aiops.db`。
 
+## Consumer MySQL 只读健康观测（Phase P4.1）
+
+`get_mysql_health` 通过 MCP stdio 调用 Consumer JVM 的固定本机健康出口；不接受 SQL 或任意 URL。该出口只在 `consumer` Profile 中显式启用时启动，绑定 `127.0.0.1:18082`，不开放业务 Controller。启动 Consumer 时追加：
+
+```powershell
+--hmdp.aiops.mysql-health.enabled=true --hmdp.aiops.mysql-health.port=18082
+```
+
+Agent 端设置 `AIOPS_MYSQL_HEALTH_PORT=18082`，与 Consumer 端一致。健康出口通过 Consumer 自身的 DataSource 借连接并调用 `isValid()`；Hikari active/idle 来自 JVM 内的池快照。当前没有可信的累计连接超时数和业务错误数，因此返回 `null`，Tool Observation 为 `partial`，不把缺失当作零。出口未启用、角色错误或无法连接时返回结构化 `error/timeout`。本阶段不添加 MySQL 巡检计划、Detection、Incident 或自动恢复；启用前应确认该端口未被其他本机进程占用。
+
 ## Phase 1 目录
 
 ```text
@@ -401,7 +411,7 @@ aiops-agent/
 ├── tool_manifest.json # 静态只读工具授权清单
 ├── api/          # FastAPI 入口和 HTTP Schema
 ├── context/      # EvidenceCard、排序、压缩和 ContextPacket
-├── mcp_tools/    # 可测试的只读 Kafka 状态与业务指标采集实现
+├── mcp_tools/    # 可测试的只读 Kafka、业务指标与 Consumer MySQL 健康采集
 ├── runtime/      # Orchestrator、stdio MCP Client、Planner、Reflection 和报告
 ├── llm/          # Mock 与 OpenAI-compatible 结构化 Provider
 ├── mcp/          # 独立 MCP Server 入口
@@ -457,9 +467,9 @@ npm run dev
 ## 安全边界
 
 - 服务默认只监听 `127.0.0.1`。
-- MCP Server 只读取两个白名单 Spring Boot 日志和 Kafka 元数据/offset；业务指标也只从相同日志白名单派生。它不访问 Java API、不读取 Kafka 消息，也不修改日志或 Kafka 状态。
+- MCP Server 只读取白名单 Spring Boot 日志、Kafka 元数据/offset，以及显式启用的 Consumer 本机 MySQL 健康出口；业务指标仍从日志白名单派生。它不读取 Kafka 消息，不执行 SQL，也不修改 HMDP 数据。
 - Monitoring Collector 在 MCP discovery 和调用前强制校验 Tool Manifest 的 `READ_ONLY` 权限；非只读或未知工具会记录结构化错误且不会被调用。
-- 本阶段不连接 Redis、MySQL 或 Docker API；不使用 Prometheus，业务指标仅来自有界只读日志派生。
+- 不连接 Redis 或 Docker API；MySQL 仅由 Consumer JVM 内只读连接校验，不由 Agent 执行任意 SQL。不使用 Prometheus，业务指标仅来自有界只读日志派生。
 - Phase M3 会从确定性 Signal 自动创建只读诊断 Incident；外部状态仍保持只读。
 - Phase G1 可以生成低风险 Action Proposal 并执行权限检查，但没有审批接口或执行器。
 - Phase S1 Skill 只向 Planner 提供领域调查指导，不执行工具、不作为 Evidence，也不进入 Reflection 判断。
@@ -467,5 +477,5 @@ npm run dev
 - Incident Manager 只触发既有诊断 Runtime，不包含任何自动修复或状态变更工具。
 - HIGH_RISK_ACTION 始终拒绝；没有 Kubernetes、服务重启、数据删除或任意命令执行路径。
 - 外部 LLM 只在显式设置 `AI_MODEL_PROVIDER=openai_compatible` 时调用。
-- 本项目不会修改 Java、Spring、Docker 或 Nginx 配置。
-- 本阶段没有执行修复、Shell 命令或数据写入 HMDP 的代码路径。
+- P4.1 仅新增 Consumer Profile 的可选只读健康出口；不修改订单业务逻辑、事务边界、Docker 或 Nginx。
+- 本阶段没有执行修复或向 HMDP 数据库写入的代码路径。

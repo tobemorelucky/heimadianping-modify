@@ -103,7 +103,6 @@ class KafkaPythonStatusReader:
                 group_id=None,
                 enable_auto_commit=False,
                 request_timeout_ms=self.timeout_ms,
-                default_api_timeout_ms=self.timeout_ms,
                 api_version_auto_timeout_ms=self.timeout_ms,
             )
             partition_ids = consumer.partitions_for_topic(topic)
@@ -121,21 +120,27 @@ class KafkaPythonStatusReader:
                 TopicPartition(topic, partition) for partition in sorted(partition_ids)
             ]
             end_offsets = consumer.end_offsets(topic_partitions)
-            committed_offsets = admin.list_consumer_group_offsets(
-                consumer_group,
-                partitions=topic_partitions,
-            )
-
-            group_state = "unknown"
-            member_count = 0
+            group_missing = False
             try:
-                descriptions = admin.describe_consumer_groups([consumer_group])
-                if descriptions:
-                    description = descriptions[0]
-                    group_state = self._group_state(description)
-                    member_count = self._member_count(description)
+                committed_offsets = admin.list_consumer_group_offsets(
+                    consumer_group,
+                    partitions=topic_partitions,
+                )
             except GroupIdNotFoundError:
-                pass
+                committed_offsets = {}
+                group_missing = True
+
+            group_state = "missing" if group_missing else "unknown"
+            member_count = 0
+            if not group_missing:
+                try:
+                    descriptions = admin.describe_consumer_groups([consumer_group])
+                    if descriptions:
+                        description = descriptions[0]
+                        group_state = self._group_state(description)
+                        member_count = self._member_count(description)
+                except GroupIdNotFoundError:
+                    group_state = "missing"
 
             snapshots: list[KafkaPartitionSnapshot] = []
             offsets_complete = True
@@ -222,10 +227,25 @@ def collect_kafka_status(
     try:
         snapshot = reader.read(target.topic, target.consumer_group)
     except Exception as exc:
+        error_type = type(exc).__name__
+        timeout = isinstance(exc, TimeoutError) or error_type in {
+            "KafkaTimeoutError",
+            "RequestTimedOutError",
+        }
+        broker_unreachable = isinstance(exc, ConnectionError) or error_type in {
+            "NoBrokersAvailable",
+            "NodeNotReadyError",
+            "KafkaConnectionError",
+        }
+        permission_denied = error_type in {
+            "TopicAuthorizationFailedError",
+            "GroupAuthorizationFailedError",
+            "ClusterAuthorizationFailedError",
+        }
         message = str(exc).strip() or type(exc).__name__
         message = message[:500]
         return ToolObservation(
-            status=ObservationStatus.ERROR,
+            status=ObservationStatus.TIMEOUT if timeout else ObservationStatus.ERROR,
             kind="kafka_consumer_status",
             source=source,
             source_tool="get_kafka_status",
@@ -235,13 +255,17 @@ def collect_kafka_status(
             data={
                 "topic": target.topic,
                 "consumer_group": target.consumer_group,
-                "broker_reachable": False,
+                "broker_reachable": False if broker_unreachable else None,
                 "lag_status": "unknown",
             },
             error=ToolError(
-                error_type=type(exc).__name__,
+                error_type=error_type,
                 message=message,
-                retryable=True,
+                retryable=(
+                    timeout
+                    or broker_unreachable
+                    or (not permission_denied and bool(getattr(exc, "retriable", False)))
+                ),
             ),
         )
 

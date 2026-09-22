@@ -133,6 +133,36 @@
       "permission_level": "READ_ONLY",
       "risk_level": "none",
       "approval_required": false
+    },
+    {
+      "tool_name": "get_mysql_health",
+      "description": "Read the Consumer JVM loopback MySQL connection-validation and Hikari pool snapshot without SQL, order data, or configuration access.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "incident_id": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "minLength": 5,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Incident Id"
+          }
+        },
+        "title": "get_mysql_healthArguments"
+      },
+      "permission": "read:mysql_health",
+      "server": "hmdp-readonly-tools",
+      "category": "observation",
+      "permission_level": "READ_ONLY",
+      "risk_level": "none",
+      "approval_required": false
     }
   ]
 }

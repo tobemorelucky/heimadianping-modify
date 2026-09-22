@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any
 
 from monitoring.detector.models import AnomalySignal, DetectionRule
@@ -14,8 +15,16 @@ from monitoring.models import (
     StoredObservation,
 )
 from monitoring.observation_store import ObservationStore
-from tool_contracts import ObservationStatus, ToolObservation
+from tool_contracts import EvidenceCompleteness, ObservationStatus, ToolObservation
 from trace.models import TraceEventType
+
+
+@dataclass(frozen=True)
+class RecoveryConfirmation:
+    fingerprint: str
+    observation_refs: tuple[str, ...]
+    first_seen: datetime
+    last_seen: datetime
 
 
 class DeterministicAnomalyDetector:
@@ -41,6 +50,47 @@ class DeterministicAnomalyDetector:
             if signal is not None:
                 signals.append(signal)
         return signals
+
+    def evaluate_recovery(self, result: CollectionResult) -> list[RecoveryConfirmation]:
+        """Confirm recovery only from consecutive complete healthy windows."""
+
+        current = result.observation
+        if current.status is not ObservationStatus.SUCCESS:
+            return []
+        confirmations: list[RecoveryConfirmation] = []
+        for rule in self.signal_store.list_active_rules(current.kind):
+            values = self._fingerprint_values(current, rule.fingerprint_fields)
+            if values is None:
+                continue
+            history = self.observation_store.list_observations(
+                schedule_id=result.run.schedule_id,
+                source_kind=None,
+                since=result.run.timestamp - timedelta(seconds=rule.lookback_window),
+                until=result.run.timestamp,
+            )
+            required = rule.condition.consecutive_windows
+            if len(history) < required:
+                continue
+            consecutive = history[-required:]
+            if consecutive[-1].collection_run_id != result.run.collection_run_id:
+                continue
+            if not all(
+                self._same_fingerprint(item.observation, rule, values)
+                and self._matches_recovery(item.observation, rule)
+                for item in consecutive
+            ):
+                continue
+            confirmations.append(
+                RecoveryConfirmation(
+                    fingerprint=self._build_fingerprint(rule, values),
+                    observation_refs=tuple(
+                        item.observation.evidence_id for item in consecutive
+                    ),
+                    first_seen=consecutive[0].timestamp,
+                    last_seen=consecutive[-1].timestamp,
+                )
+            )
+        return confirmations
 
     def _evaluate_rule(
         self,
@@ -145,6 +195,29 @@ class DeterministicAnomalyDetector:
         return (
             member_count == rule.condition.member_count_equals
             and lag > rule.condition.lag_greater_than
+        )
+
+    @staticmethod
+    def _matches_recovery(
+        observation: ToolObservation,
+        rule: DetectionRule,
+    ) -> bool:
+        if (observation.status is not ObservationStatus.SUCCESS
+                or observation.completeness is not EvidenceCompleteness.COMPLETE):
+            return False
+        if observation.kind != rule.source_kind:
+            return False
+        data = observation.data
+        member_count = data.get("member_count")
+        lag = DeterministicAnomalyDetector._lag(data)
+        return (
+            type(member_count) is int
+            and member_count > rule.condition.member_count_equals
+            and type(lag) in (int, float)
+            and 0 <= lag <= rule.condition.lag_greater_than
+            and data.get("topic_exists") is True
+            and data.get("offsets_complete") is True
+            and data.get("partitions_truncated") is False
         )
 
     @staticmethod

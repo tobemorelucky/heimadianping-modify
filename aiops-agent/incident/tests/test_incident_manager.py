@@ -5,11 +5,13 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from evaluation.runner import FixtureMCPClient, load_fault_fixture
 from governance.permissions import PermissionGateway
 from governance.proposal import ProposalGenerator
 from incident.manager import IncidentManager
-from incident.models import IncidentStatus
+from incident.models import DiagnosisStatus as ManagedDiagnosisStatus, IncidentStatus
 from incident.store import IncidentStore
 from llm.mock import MockLLMProvider
 from memory.database import SQLiteDatabase
@@ -105,7 +107,8 @@ def test_anomaly_signal_creates_incident(tmp_path):
 
     assert result.created is True
     assert result.diagnosis_triggered is True
-    assert result.incident.status is IncidentStatus.RESOLVED
+    assert result.incident.status is IncidentStatus.ACTIVE
+    assert result.incident.diagnosis_status is ManagedDiagnosisStatus.COMPLETED
     assert result.incident.trigger_signal_ids == ("sig_incident_0001",)
     assert result.incident.diagnosis_report_id == "report_incident_success"
     assert runtime.calls[0][1] == result.incident.incident_id
@@ -164,10 +167,12 @@ def test_diagnosis_success_uses_existing_runtime_with_same_incident_id(tmp_path)
 
     result = manager.handle_signal(anomaly_signal())
 
-    assert result.incident.status is IncidentStatus.RESOLVED
+    assert result.incident.status is IncidentStatus.ACTIVE
+    assert result.incident.diagnosis_status is ManagedDiagnosisStatus.COMPLETED
     assert result.incident.diagnosis_report_id is not None
     assert result.proposal_id is not None
     assert result.permission_decision == "REQUIRE_APPROVAL"
+    assert store.get(result.incident.incident_id).status is IncidentStatus.ACTIVE
     runtime_incident = database.get_incident(result.incident.incident_id)
     runtime_report = database.get_report(result.incident.incident_id)
     assert runtime_incident is not None
@@ -197,7 +202,8 @@ def test_diagnosis_failure_sets_failed_status_and_trace(tmp_path):
 
     result = manager.handle_signal(anomaly_signal())
 
-    assert result.incident.status is IncidentStatus.FAILED
+    assert result.incident.status is IncidentStatus.ACTIVE
+    assert result.incident.diagnosis_status is ManagedDiagnosisStatus.FAILED
     assert result.diagnosis_error == "diagnosis transport failed"
     traces = store.list_trace_events(result.incident.incident_id)
     assert [row["event_type"] for row in traces] == [
@@ -206,3 +212,67 @@ def test_diagnosis_failure_sets_failed_status_and_trace(tmp_path):
         "diagnosis_completed",
     ]
     assert '"outcome": "failed"' in traces[-1]["payload_json"]
+
+
+def test_recovery_confirmation_changes_only_fault_status(tmp_path):
+    _, store = incident_store(tmp_path)
+    manager = IncidentManager(
+        store, SuccessfulRuntime(), clock=lambda: BASE_TIME + timedelta(minutes=5)
+    )
+    active = manager.handle_signal(anomaly_signal()).incident
+    assert manager.confirm_recovery(
+        fingerprint=active.fingerprint,
+        observation_refs=("healthy_1", "healthy_2"),
+        first_seen=active.last_signal_at,
+        last_seen=active.last_signal_at + timedelta(seconds=30),
+    ) is None
+    assert store.get(active.incident_id).status is IncidentStatus.ACTIVE
+
+    recovered = manager.confirm_recovery(
+        fingerprint=active.fingerprint,
+        observation_refs=("healthy_1", "healthy_2"),
+        first_seen=active.last_signal_at + timedelta(seconds=30),
+        last_seen=active.last_signal_at + timedelta(seconds=60),
+    )
+    assert recovered is not None
+    assert recovered.status is IncidentStatus.RECOVERED
+    assert recovered.diagnosis_status is ManagedDiagnosisStatus.COMPLETED
+    assert manager.confirm_recovery(
+        fingerprint=active.fingerprint,
+        observation_refs=("healthy_1", "healthy_2"),
+        first_seen=active.last_signal_at + timedelta(seconds=30),
+        last_seen=active.last_signal_at + timedelta(seconds=60),
+    ) is None
+    assert [row["event_type"] for row in store.list_trace_events(active.incident_id)][-1] == "incident_recovered"
+
+
+def test_new_signal_after_recovery_creates_another_incident(tmp_path):
+    _, store = incident_store(tmp_path)
+    manager = IncidentManager(
+        store, SuccessfulRuntime(), clock=lambda: BASE_TIME + timedelta(minutes=5)
+    )
+    first = manager.handle_signal(anomaly_signal()).incident
+    manager.confirm_recovery(
+        fingerprint=first.fingerprint,
+        observation_refs=("healthy_1", "healthy_2"),
+        first_seen=first.last_signal_at + timedelta(seconds=30),
+        last_seen=first.last_signal_at + timedelta(seconds=60),
+    )
+    next_result = manager.handle_signal(anomaly_signal(signal_id="sig_incident_0002", offset_seconds=120))
+    assert next_result.created is True
+    assert next_result.incident.incident_id != first.incident_id
+
+
+def test_acknowledged_cannot_hide_an_active_fault(tmp_path):
+    _, store = incident_store(tmp_path)
+    active = IncidentManager(
+        store, SuccessfulRuntime(), clock=lambda: BASE_TIME + timedelta(minutes=5)
+    ).handle_signal(anomaly_signal()).incident
+
+    with pytest.raises(ValueError, match="unsupported incident status transition"):
+        store.update_status(
+            active.incident_id, IncidentStatus.ACKNOWLEDGED,
+            expected_status=IncidentStatus.ACTIVE,
+            updated_at=BASE_TIME + timedelta(minutes=6),
+        )
+    assert store.get(active.incident_id).status is IncidentStatus.ACTIVE

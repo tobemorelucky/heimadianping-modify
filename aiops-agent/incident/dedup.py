@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from incident.models import Incident
+from incident.models import Incident, IncidentStatus
 from incident.store import IncidentStore
 from monitoring.detector.models import AnomalySignal
 
@@ -20,7 +20,7 @@ class IncidentDeduplicator:
 
     def find_duplicate(self, signal: AnomalySignal) -> Incident | None:
         existing = self.store.latest_for_fingerprint(signal.fingerprint)
-        if existing is None:
+        if existing is None or existing.status is not IncidentStatus.ACTIVE:
             return None
         cooldown_end = existing.last_signal_at + timedelta(
             seconds=self.cooldown_seconds

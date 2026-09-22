@@ -50,6 +50,7 @@ class Settings(BaseModel):
     )
     kafka_request_timeout_ms: int = Field(default=3000, ge=250, le=30000)
     kafka_lag_threshold: int = Field(default=1000, ge=0, le=1_000_000_000)
+    mysql_health_port: int = Field(default=18082, ge=1, le=65535)
 
     @field_validator("host")
     @classmethod
@@ -119,6 +120,7 @@ def load_settings(
         "kafka_default_consumer_group": ("KAFKA_CONSUMER_GROUP",),
         "kafka_request_timeout_ms": ("AIOPS_KAFKA_REQUEST_TIMEOUT_MS",),
         "kafka_lag_threshold": ("AIOPS_KAFKA_LAG_THRESHOLD",),
+        "mysql_health_port": ("AIOPS_MYSQL_HEALTH_PORT",),
     }
     values: dict[str, str] = {}
     for field_name, environment_names in field_mapping.items():

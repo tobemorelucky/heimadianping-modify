@@ -57,6 +57,7 @@ class StdioMCPClient:
         kafka_default_consumer_group: str | None = None,
         kafka_request_timeout_ms: int | None = None,
         kafka_lag_threshold: int | None = None,
+        mysql_health_port: int | None = None,
     ) -> None:
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
@@ -87,6 +88,13 @@ class StdioMCPClient:
             if kafka_lag_threshold is not None
             else int(os.environ.get("AIOPS_KAFKA_LAG_THRESHOLD", "1000"))
         )
+        self.mysql_health_port = (
+            mysql_health_port
+            if mysql_health_port is not None
+            else int(os.environ.get("AIOPS_MYSQL_HEALTH_PORT", "18082"))
+        )
+        if not 1 <= self.mysql_health_port <= 65535:
+            raise ValueError("AIOPS_MYSQL_HEALTH_PORT is invalid")
         self._tool_schemas: list[dict[str, Any]] | None = None
 
     def get_tool_schemas(self) -> list[dict[str, Any]]:
@@ -120,6 +128,7 @@ class StdioMCPClient:
                     self.kafka_request_timeout_ms
                 ),
                 "AIOPS_KAFKA_LAG_THRESHOLD": str(self.kafka_lag_threshold),
+                "AIOPS_MYSQL_HEALTH_PORT": str(self.mysql_health_port),
             },
         )
 

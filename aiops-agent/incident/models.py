@@ -24,9 +24,15 @@ class IncidentSeverity(str, Enum):
 
 
 class IncidentStatus(str, Enum):
-    OPEN = "OPEN"
-    DIAGNOSING = "DIAGNOSING"
-    RESOLVED = "RESOLVED"
+    ACTIVE = "ACTIVE"
+    RECOVERED = "RECOVERED"
+    ACKNOWLEDGED = "ACKNOWLEDGED"
+
+
+class DiagnosisStatus(str, Enum):
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    COMPLETED = "COMPLETED"
     FAILED = "FAILED"
 
 
@@ -42,7 +48,8 @@ class Incident(BaseModel):
     )
     title: str = Field(min_length=1, max_length=200)
     severity: IncidentSeverity
-    status: IncidentStatus = IncidentStatus.OPEN
+    status: IncidentStatus = IncidentStatus.ACTIVE
+    diagnosis_status: DiagnosisStatus = DiagnosisStatus.PENDING
     trigger_signal_ids: tuple[str, ...] = Field(min_length=1, max_length=100)
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)
@@ -104,6 +111,7 @@ class IncidentTraceEvent(BaseModel):
     def require_incident_manager_event(self) -> "IncidentTraceEvent":
         allowed = {
             TraceEventType.INCIDENT_CREATED,
+            TraceEventType.INCIDENT_RECOVERED,
             TraceEventType.DIAGNOSIS_STARTED,
             TraceEventType.DIAGNOSIS_COMPLETED,
             TraceEventType.ACTION_PROPOSAL_CREATED,

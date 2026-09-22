@@ -5,6 +5,7 @@ import com.hmdp.kafka.message.VoucherOrderMessage;
 import com.hmdp.service.impl.VoucherOrderTransactionalService;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.stereotype.Component;
@@ -17,6 +18,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
+@ConditionalOnProperty(prefix = "hmdp.kafka.listener", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class VoucherOrderKafkaConsumer {
 
     private final VoucherOrderTransactionalService transactionalService;

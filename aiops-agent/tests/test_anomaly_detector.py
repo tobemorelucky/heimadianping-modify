@@ -83,6 +83,9 @@ def persist_kafka_observation(
                 "consumer_group": "hmdp-seckill-order-create-v1",
                 "member_count": member_count,
                 "total_lag": lag,
+                "topic_exists": True,
+                "offsets_complete": True,
+                "partitions_truncated": False,
             },
             error=ToolError(
                 error_type="KafkaError",
@@ -110,6 +113,9 @@ def persist_kafka_observation(
                 "consumer_group": "hmdp-seckill-order-create-v1",
                 "member_count": member_count,
                 "total_lag": lag,
+                "topic_exists": True,
+                "offsets_complete": True,
+                "partitions_truncated": False,
             },
         )
     run = CollectionRun(
@@ -281,3 +287,59 @@ def test_rule_and_signal_schema_are_persisted(detector_env):
     assert rules[0].rule_id == KAFKA_CONSUMER_DOWN_RULE_ID
     assert rules[0].lookback_window == 120
     assert rules[0].cooldown == 600
+
+
+def test_recovery_requires_two_complete_healthy_windows(detector_env):
+    observation_store, _, detector = detector_env
+    down = persist_kafka_observation(
+        observation_store, timestamp=BASE_TIME, member_count=0, lag=50_000
+    )
+    first_healthy = persist_kafka_observation(
+        observation_store,
+        timestamp=BASE_TIME + timedelta(seconds=30),
+        member_count=1,
+        lag=25,
+    )
+    failed = persist_kafka_observation(
+        observation_store,
+        timestamp=BASE_TIME + timedelta(seconds=60),
+        member_count=1,
+        lag=25,
+        status=ObservationStatus.ERROR,
+    )
+    second_healthy = persist_kafka_observation(
+        observation_store,
+        timestamp=BASE_TIME + timedelta(seconds=90),
+        member_count=1,
+        lag=25,
+    )
+    third_healthy = persist_kafka_observation(
+        observation_store,
+        timestamp=BASE_TIME + timedelta(seconds=120),
+        member_count=1,
+        lag=0,
+    )
+
+    for result in (down, first_healthy, failed, second_healthy):
+        assert detector.evaluate_recovery(result) == []
+    confirmations = detector.evaluate_recovery(third_healthy)
+    assert len(confirmations) == 1
+    assert confirmations[0].observation_refs == (
+        second_healthy.observation.evidence_id,
+        third_healthy.observation.evidence_id,
+    )
+
+
+def test_member_return_with_backlog_is_not_recovery(detector_env):
+    observation_store, _, detector = detector_env
+    first = persist_kafka_observation(
+        observation_store, timestamp=BASE_TIME, member_count=1, lag=50_000
+    )
+    second = persist_kafka_observation(
+        observation_store,
+        timestamp=BASE_TIME + timedelta(seconds=30),
+        member_count=1,
+        lag=49_000,
+    )
+    assert detector.evaluate_recovery(first) == []
+    assert detector.evaluate_recovery(second) == []

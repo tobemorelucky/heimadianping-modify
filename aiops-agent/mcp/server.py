@@ -27,6 +27,11 @@ from mcp_tools.kafka_status import (
     KafkaStatusRequest,
     collect_kafka_status,
 )
+from mcp_tools.mysql_health import (
+    LoopbackMysqlHealthReader,
+    MysqlHealthRequest,
+    collect_mysql_health,
+)
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 from tool_contracts import (
     EvidenceCompleteness,
@@ -300,6 +305,32 @@ def get_business_metrics(
     return collect_business_metrics(
         request,
         reader=LogDerivedBusinessMetricsReader(_project_root()),
+    )
+
+
+@server.tool(
+    name="get_mysql_health",
+    description=(
+        "Read the Consumer JVM loopback MySQL connection-validation and Hikari pool "
+        "snapshot without SQL, order data, or configuration access."
+    ),
+    structured_output=True,
+)
+def get_mysql_health(
+    incident_id: Annotated[str | None, Field(min_length=5, max_length=64)] = None,
+) -> ToolObservation:
+    """Return only the read-only Consumer-role health snapshot."""
+
+    try:
+        request = MysqlHealthRequest(incident_id=incident_id)
+    except ValidationError as exc:
+        raise ToolError("MySQL health input violates the read-only policy") from exc
+    return collect_mysql_health(
+        request,
+        reader=LoopbackMysqlHealthReader(
+            port=_positive_int_env("AIOPS_MYSQL_HEALTH_PORT", 18082),
+            timeout_seconds=3.0,
+        ),
     )
 
 

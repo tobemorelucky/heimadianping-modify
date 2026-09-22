@@ -27,6 +27,31 @@ describe('AIOps Console', () => {
     expect(wrapper.text()).toContain('尚无持续巡检记录')
   })
 
+  it('shows Attention for an active fault even when diagnosis is complete', async () => {
+    getMonitoringSummary.mockResolvedValue({ health: 'healthy', active_incident_count: 1, last_inspection_at: null })
+    listIncidents.mockResolvedValue([{
+      incident_id: 'inc_active', title: 'Kafka consumer down', source: 'alert',
+      status: 'ACTIVE', diagnosis_status: 'COMPLETED', created_at: '2026-09-19T04:00:00Z'
+    }])
+    const wrapper = mount(Dashboard, { global: { stubs: { RouterLink: routerLink } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Attention')
+    expect(wrapper.text()).toContain('存在未恢复 Incident')
+    expect(wrapper.text()).not.toContain('Healthy')
+  })
+
+  it('shows Healthy when the fault is recovered', async () => {
+    getMonitoringSummary.mockResolvedValue({ health: 'healthy', active_incident_count: 0, last_inspection_at: null })
+    listIncidents.mockResolvedValue([{
+      incident_id: 'inc_recovered', title: 'Kafka consumer down', source: 'alert',
+      status: 'RECOVERED', diagnosis_status: 'COMPLETED', created_at: '2026-09-19T04:00:00Z'
+    }])
+    const wrapper = mount(Dashboard, { global: { stubs: { RouterLink: routerLink } } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('Healthy')
+    expect(wrapper.text()).toContain('RECOVERED')
+  })
+
   it('shows Agent Offline instead of stale Dashboard data when the API is down', async () => {
     getMonitoringSummary.mockRejectedValue(new Error('connection refused'))
     listIncidents.mockRejectedValue(new Error('connection refused'))
@@ -53,7 +78,7 @@ describe('AIOps Console', () => {
   it('renders Kafka timeline, evidence, skill, and confidence changes', async () => {
     getIncident.mockResolvedValue({
       incident_id: 'inc_kafka_demo', title: '秒杀订单延迟', description: 'Kafka lag',
-      status: 'RESOLVED', severity: 'high', runtime_status: 'awaiting_human',
+      status: 'ACTIVE', diagnosis_status: 'COMPLETED', severity: 'high', runtime_status: 'awaiting_human',
       created_at: '2026-09-19T04:00:00Z', trigger_signal_ids: ['sig_demo'],
       traces: [
         { event_id: 't1', event_type: 'skill_selected', created_at: '2026-09-19T04:00:00Z', summary: 'Selected Kafka skill', payload: { skill_id: 'kafka-consumer-diagnosis', version: '1.0' } },
@@ -69,6 +94,8 @@ describe('AIOps Console', () => {
     const wrapper = mount(IncidentDetail, { props: { id: 'inc_kafka_demo' }, global: { stubs: { RouterLink: routerLink } } })
     await flushPromises()
     expect(wrapper.text()).toContain('kafka-consumer-diagnosis')
+    expect(wrapper.text()).toContain('Incident · ACTIVE')
+    expect(wrapper.text()).toContain('Diagnosis · COMPLETED')
     expect(wrapper.text()).toContain('get_kafka_status')
     expect(wrapper.text()).toContain('member_count: 0')
     expect(wrapper.text()).toContain('UNKNOWN 0%')

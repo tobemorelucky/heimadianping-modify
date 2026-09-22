@@ -15,6 +15,7 @@ class EvidenceRanker:
         "mcp://hmdp-readonly-tools": 0.7,
         "hmdp.kafka.consumer_group": 0.95,
         "hmdp.seckill.business_metrics": 0.9,
+        "hmdp-consumer.mysql-health": 0.9,
     }
 
     def score(self, card: EvidenceCard, *, reference_time: datetime) -> float:

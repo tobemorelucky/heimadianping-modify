@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: hmdp-web
+
+# The dual-runtime demo uses the Kafka order path. The legacy single-JVM mode
+# remains available for the Redis Stream fallback.
+seckill:
+  message:
+    mode: kafka
+
+# Kafka order consumption is owned by the separate consumer JVM.
+# Keep the producer and HTTP seckill entry point in this JVM.
+hmdp:
+  kafka:
+    listener:
+      enabled: false
+  seckill:
+    redis-stream-consumer:
+      enabled: false

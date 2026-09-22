@@ -504,3 +504,61 @@ class BusinessMetricsEvidenceCompressor:
             0.4 * confidence_scale,
             ratio_facts,
         )
+
+
+class MysqlHealthEvidenceCompressor:
+    """Keep only bounded Consumer-path health facts, never raw responses."""
+
+    SUPPORTED_TOOL = "get_mysql_health"
+
+    def __init__(self, *, max_samples: int, max_sample_chars: int) -> None:
+        self.max_fact_chars = max_sample_chars
+
+    def compress(self, evidence: Evidence) -> EvidenceCard:
+        if evidence.source_tool != self.SUPPORTED_TOOL:
+            raise UnsupportedEvidenceError(
+                f"unsupported evidence source_tool: {evidence.source_tool}"
+            )
+        data = evidence.data
+        def display(value: Any) -> str:
+            return "unavailable" if value is None else str(value)
+
+        facts = [
+            f"source_role={display(data.get('source_role'))}.",
+            f"database_reachable={display(data.get('database_reachable'))}.",
+            f"connection_test_status={display(data.get('connection_test_status'))}.",
+            f"hikari_active={display(data.get('hikari_active'))}; "
+            f"hikari_idle={display(data.get('hikari_idle'))}.",
+            f"connection_timeout_count={display(data.get('connection_timeout_count'))}; "
+            f"error_count={display(data.get('error_count'))}.",
+        ]
+        if evidence.error is not None:
+            facts.append(f"Tool {evidence.status.value}: {evidence.error.message}")
+        bounded = tuple(
+            LogEvidenceCompressor._bounded(fact, self.max_fact_chars)
+            for fact in facts
+        )
+        summary = LogEvidenceCompressor._bounded(evidence.summary, 500)
+        fingerprint = LogEvidenceCompressor._fingerprint(
+            source=evidence.source,
+            kind=evidence.kind,
+            status=evidence.status.value,
+            summary=summary,
+            facts=bounded,
+            samples=(),
+        )
+        return EvidenceCard(
+            evidence_id=evidence.evidence_id,
+            source=evidence.source,
+            kind=evidence.kind,
+            summary=summary,
+            facts=bounded,
+            samples=(),
+            interpretation="consumer_mysql_health_observation",
+            confidence=0.5,
+            score=0.0,
+            status=evidence.status,
+            completeness=evidence.completeness,
+            collected_at=evidence.collected_at,
+            fingerprint=fingerprint,
+        )

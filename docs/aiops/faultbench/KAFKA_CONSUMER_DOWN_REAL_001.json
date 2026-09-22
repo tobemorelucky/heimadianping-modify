@@ -1,0 +1,55 @@
+{
+  "fault_id": "KAFKA_CONSUMER_DOWN_REAL_001",
+  "scenario": "HMDP seckill orders are accepted by the web JVM but remain pending while the separate Kafka consumer JVM is stopped.",
+  "difficulty": "medium",
+  "execution_mode": "real_local_windows",
+  "injection_method": {
+    "action": "Stop only the isolated hmdp-consumer JVM after one baseline order commits; keep hmdp-web, MySQL, Redis, and Kafka running.",
+    "guardrails": [
+      "Use dedicated one-partition main/retry/DLT topics and consumer groups.",
+      "Use only AIOPS_P22_ tagged vouchers and distinct local test accounts.",
+      "Send orders through POST /voucher-order/seckill/{voucherId}, never directly to Kafka.",
+      "Do not stop containers, delete data, or create an Incident manually."
+    ]
+  },
+  "observations": {
+    "healthy_baseline": [
+      "Consumer group has at least one active member.",
+      "Committed offset exists and lag is zero.",
+      "The baseline HTTP-accepted order exists in tb_voucher_order."
+    ],
+    "fault_window": [
+      "HTTP accepts additional seckill orders and Kafka topic end offset increases.",
+      "Consumer group member_count is zero and lag is greater than the demo threshold.",
+      "tb_voucher_order count for the test voucher stays unchanged until consumer recovery."
+    ],
+    "recovery": [
+      "Consumer group regains a member and lag drains to zero.",
+      "Previously pending test orders appear in tb_voucher_order."
+    ]
+  },
+  "expected_root_cause": "Kafka consumer JVM unavailable; web continues producing, so order messages accumulate before MySQL persistence.",
+  "expected_hypothesis": {
+    "description": "Kafka consumer unavailability causes seckill order creation delay.",
+    "status": "SUPPORTED",
+    "counterexamples_to_check": [
+      "Kafka broker unavailable or producer send failed.",
+      "Consumer members healthy with lag zero."
+    ]
+  },
+  "expected_tools": ["get_kafka_status"],
+  "expected_evidence": [
+    "get_kafka_status returns success for the dedicated topic and group.",
+    "member_count=0 and committed/end offsets show positive lag for consecutive windows.",
+    "HTTP acceptance and test-voucher MySQL count divergence are externally verified."
+  ],
+  "optional_evidence": [
+    "search_application_logs only after the dual-JVM log path is supported by the existing allowlist."
+  ],
+  "evaluation_gate": {
+    "automatic_incident_required": true,
+    "fixture_or_manual_incident_allowed": false,
+    "current_status": "blocked_by_existing_kafka_mcp_configuration_error",
+    "observed_error": "KafkaConfigurationError: Unrecognized configs: {'default_api_timeout_ms'}"
+  }
+}

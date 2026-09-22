@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import json
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Callable, Protocol
 
 from governance.permissions import PermissionGateway
 from governance.proposal import ProposalGenerator
 from incident.dedup import IncidentDeduplicator
 from incident.models import (
+    DiagnosisStatus,
     Incident,
     IncidentHandlingResult,
     IncidentSeverity,
@@ -85,7 +86,8 @@ class IncidentManager:
         incident = Incident(
             title=self._title(signal),
             severity=IncidentSeverity(signal.severity.value),
-            status=IncidentStatus.OPEN,
+            status=IncidentStatus.ACTIVE,
+            diagnosis_status=DiagnosisStatus.PENDING,
             trigger_signal_ids=(signal.signal_id,),
             fingerprint=signal.fingerprint,
             last_signal_at=signal.last_seen,
@@ -111,9 +113,9 @@ class IncidentManager:
         incident: Incident,
         signal: AnomalySignal,
     ) -> IncidentHandlingResult:
-        diagnosing = self.store.update_status(
+        diagnosing = self.store.update_diagnosis_status(
             incident.incident_id,
-            IncidentStatus.DIAGNOSING,
+            DiagnosisStatus.RUNNING,
             updated_at=self.clock(),
         )
         self._trace(
@@ -130,9 +132,9 @@ class IncidentManager:
                 self._runtime_request(diagnosing, signal),
                 incident_id=incident.incident_id,
             )
-            completed = self.store.update_status(
+            completed = self.store.update_diagnosis_status(
                 incident.incident_id,
-                IncidentStatus.RESOLVED,
+                DiagnosisStatus.COMPLETED,
                 updated_at=self.clock(),
                 diagnosis_report_id=result.report.report_id,
             )
@@ -143,7 +145,8 @@ class IncidentManager:
                 {
                     "outcome": "success",
                     "report_id": result.report.report_id,
-                    "diagnosis_status": result.report.status.value,
+                    "diagnosis_status": DiagnosisStatus.COMPLETED.value,
+                    "report_status": result.report.status.value,
                     "root_cause": result.report.root_cause,
                 },
             )
@@ -156,9 +159,9 @@ class IncidentManager:
                 permission_decision=permission_decision,
             )
         except Exception as exc:
-            failed = self.store.update_status(
+            failed = self.store.update_diagnosis_status(
                 incident.incident_id,
-                IncidentStatus.FAILED,
+                DiagnosisStatus.FAILED,
                 updated_at=self.clock(),
             )
             error_message = str(exc).strip() or type(exc).__name__
@@ -178,6 +181,41 @@ class IncidentManager:
                 diagnosis_triggered=True,
                 diagnosis_error=error_message[:500],
             )
+
+    def confirm_recovery(
+        self,
+        *,
+        fingerprint: str,
+        observation_refs: tuple[str, ...],
+        first_seen: datetime,
+        last_seen: datetime,
+    ) -> Incident | None:
+        """Close the fault only after later, matching healthy observation windows."""
+
+        incident = self.store.latest_for_fingerprint(fingerprint)
+        if (
+            incident is None
+            or incident.status is not IncidentStatus.ACTIVE
+            or first_seen <= incident.last_signal_at
+        ):
+            return None
+        recovered = self.store.update_status(
+            incident.incident_id,
+            IncidentStatus.RECOVERED,
+            expected_status=IncidentStatus.ACTIVE,
+            updated_at=self.clock(),
+        )
+        self._trace(
+            incident.incident_id,
+            TraceEventType.INCIDENT_RECOVERED,
+            "Consecutive read-only observations confirmed fault recovery.",
+            {
+                "observation_refs": list(observation_refs),
+                "first_seen": first_seen.isoformat(),
+                "last_seen": last_seen.isoformat(),
+            },
+        )
+        return recovered
 
     def _govern(self, result: DiagnosisRunResult) -> tuple[str | None, str | None]:
         if self.proposal_generator is None or self.permission_gateway is None:

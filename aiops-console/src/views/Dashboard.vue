@@ -1,5 +1,5 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 import { getMonitoringSummary, listIncidents } from '../api/client.js'
 import AgentOffline from '../components/AgentOffline.vue'
@@ -9,6 +9,7 @@ const summary = ref(null)
 const incidents = ref([])
 const loading = ref(true)
 const offline = ref(false)
+const hasActiveIncident = computed(() => Number(summary.value?.active_incident_count || 0) > 0)
 
 async function refresh() {
   loading.value = true
@@ -35,7 +36,7 @@ onMounted(refresh)
     <AgentOffline v-else-if="offline" :retry="refresh" />
     <template v-else-if="summary">
       <section class="stat-grid" aria-label="巡检摘要">
-        <div class="stat-card stat-health"><span class="eyebrow">SYSTEM HEALTH</span><div class="stat-value"><span class="large-indicator" :class="summary.health"></span>{{ summary.health === 'healthy' ? 'Healthy' : 'Attention' }}</div><p>{{ summary.health === 'healthy' ? '当前无活跃 Incident' : '存在待处理 Incident' }}</p></div>
+        <div class="stat-card stat-health"><span class="eyebrow">SYSTEM HEALTH</span><div class="stat-value"><span class="large-indicator" :class="hasActiveIncident ? 'attention' : 'healthy'"></span>{{ hasActiveIncident ? 'Attention' : 'Healthy' }}</div><p>{{ hasActiveIncident ? '存在未恢复 Incident' : '当前无活跃 Incident' }}</p></div>
         <div class="stat-card"><span class="eyebrow">LAST INSPECTION</span><div class="stat-value stat-time">{{ formatTime(summary.last_inspection_at) }}</div><p><span v-if="summary.inspection_mode === 'fixture'">FaultBench fixture replay · </span>{{ summary.last_inspection_tool || '尚无持续巡检记录' }}<span v-if="summary.last_inspection_status"> · {{ summary.last_inspection_status }}</span></p></div>
         <div class="stat-card"><span class="eyebrow">ACTIVE INCIDENTS</span><div class="stat-value stat-number">{{ summary.active_incident_count }}</div><p>等待 Agent 或人工处理</p></div>
       </section>

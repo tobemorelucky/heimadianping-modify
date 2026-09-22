@@ -10,6 +10,7 @@ from context.compressor import (
     BusinessMetricsEvidenceCompressor,
     KafkaEvidenceCompressor,
     LogEvidenceCompressor,
+    MysqlHealthEvidenceCompressor,
 )
 from context.packet import (
     ContextBudget,
@@ -58,6 +59,7 @@ class ContextManager:
             "get_business_metrics": BusinessMetricsEvidenceCompressor(
                 **compressor_options
             ),
+            "get_mysql_health": MysqlHealthEvidenceCompressor(**compressor_options),
         }
 
     def build(

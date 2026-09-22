@@ -4,6 +4,7 @@ import com.hmdp.kafka.message.VoucherOrderMessage;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
@@ -19,6 +20,7 @@ import java.time.LocalDateTime;
  */
 @Slf4j
 @Component
+@ConditionalOnProperty(prefix = "hmdp.kafka.listener", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class VoucherOrderDltConsumer {
 
     /**

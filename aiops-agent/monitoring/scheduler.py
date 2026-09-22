@@ -94,6 +94,13 @@ class MonitoringScheduler:
                 if self.incident_manager is not None:
                     for signal in signals:
                         self.incident_manager.handle_signal(signal)
+                    for recovery in self.detector.evaluate_recovery(result):
+                        self.incident_manager.confirm_recovery(
+                            fingerprint=recovery.fingerprint,
+                            observation_refs=recovery.observation_refs,
+                            first_seen=recovery.first_seen,
+                            last_seen=recovery.last_seen,
+                        )
             completed_at = result.run.timestamp
             self.observation_store.mark_schedule_run(
                 schedule.schedule_id,
@@ -133,6 +140,7 @@ def build_local_scheduler() -> MonitoringScheduler:
         kafka_default_consumer_group=settings.kafka_default_consumer_group,
         kafka_request_timeout_ms=settings.kafka_request_timeout_ms,
         kafka_lag_threshold=settings.kafka_lag_threshold,
+        mysql_health_port=settings.mysql_health_port,
     )
     registry = ToolRegistry.from_file()
     collector = MonitoringCollector(client, registry, store)

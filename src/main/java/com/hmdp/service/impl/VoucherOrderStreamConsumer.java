@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.dao.DataAccessException;
 import org.springframework.data.redis.connection.stream.Consumer;
@@ -43,6 +44,7 @@ import static com.hmdp.utils.RedisConstants.SECKILL_ORDER_STREAM_KEY;
  */
 @Slf4j
 @Component
+@ConditionalOnProperty(prefix = "hmdp.seckill.redis-stream-consumer", name = "enabled", havingValue = "true", matchIfMissing = true)
 public class VoucherOrderStreamConsumer {
 
     /** 失败记录和原消息 ACK 由同一个 Redis Lua 脚本原子完成。 */

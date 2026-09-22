@@ -19,6 +19,7 @@ TRACE_PAYLOAD_FIELDS = {
     "contradicting_evidence_refs", "proposal_id", "action_name",
     "risk_level", "approval_required", "evidence_refs", "reason",
     "report_id", "outcome", "error_type", "error", "root_cause",
+    "diagnosis_status", "report_status", "observation_refs", "first_seen", "last_seen",
 }
 EVENT_NAMES = {
     "tool_started": "tool_called",
@@ -83,6 +84,7 @@ class ConsoleReader:
                 "demo_scenario": demo_labels.get(incident_id),
                 "severity": primary["severity"],
                 "status": lifecycle["status"] if lifecycle else task["status"],
+                "diagnosis_status": lifecycle["diagnosis_status"] if lifecycle else None,
                 "runtime_status": task["status"] if task else None,
                 "source": task["source"] if task else "alert",
                 "created_at": primary["created_at"],
@@ -97,7 +99,7 @@ class ConsoleReader:
     def monitoring_summary(self) -> dict[str, Any]:
         incidents = self.list_incidents(limit=None)
         active_count = sum(
-            item["status"].casefold() not in {"resolved", "closed", "cancelled"}
+            item["status"] == "ACTIVE"
             for item in incidents
         )
         latest = None

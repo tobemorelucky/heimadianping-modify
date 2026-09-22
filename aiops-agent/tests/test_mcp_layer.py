@@ -38,6 +38,7 @@ def test_mcp_server_starts_and_lists_all_readonly_observation_tools(tmp_path):
         "search_application_logs",
         "get_kafka_status",
         "get_business_metrics",
+        "get_mysql_health",
     }
     assert {"incident_id", "log_paths"}.issubset(
         by_name["search_application_logs"]["input_schema"]["required"]
@@ -48,6 +49,7 @@ def test_mcp_server_starts_and_lists_all_readonly_observation_tools(tmp_path):
     assert set(
         by_name["get_business_metrics"]["input_schema"]["properties"]
     ) == {"incident_id", "max_lines"}
+    assert set(by_name["get_mysql_health"]["input_schema"]["properties"]) == {"incident_id"}
 
 
 def test_log_tool_returns_uniform_evidence_envelope(tmp_path):

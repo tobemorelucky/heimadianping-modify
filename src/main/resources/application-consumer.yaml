@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: hmdp-consumer
+  main:
+    web-application-type: none
+
+seckill:
+  message:
+    mode: kafka
+
+# This JVM owns the main, retry and DLT listeners and the order transaction.
+hmdp:
+  kafka:
+    listener:
+      enabled: true
+  seckill:
+    redis-stream-consumer:
+      enabled: false
+
+# Only the web JVM runs the unrelated Canal background client.
+canal:
+  enabled: false

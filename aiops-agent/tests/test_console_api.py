@@ -109,6 +109,8 @@ def test_console_shows_faultbench_incident_timeline_and_governance(tmp_path):
     assert detail_response.status_code == 200
     detail = detail_response.json()
     assert detail["incident_id"] == result.incident.incident_id
+    assert detail["status"] == "ACTIVE"
+    assert detail["diagnosis_status"] == "COMPLETED"
     assert detail["report"]["status"] == "confirmed"
     assert len(detail["evidence"]) == 2
     assert {item["source_tool"] for item in detail["evidence"]} == {
@@ -136,5 +138,55 @@ def test_console_shows_faultbench_incident_timeline_and_governance(tmp_path):
     assert detail["proposals"][0]["permission_result"] == "REQUIRE_APPROVAL"
     assert detail["proposals"][0]["evidence_refs"]
     assert list_response.json()[0]["incident_id"] == detail["incident_id"]
-    assert dashboard_response.json()["health"] == "healthy"  # manager marked diagnosis resolved
+    assert dashboard_response.json()["health"] == "attention"
+    assert dashboard_response.json()["active_incident_count"] == 1
     assert mutation_response.status_code == 404
+
+
+def test_dashboard_becomes_healthy_only_after_confirmed_recovery(tmp_path):
+    app = create_app(Settings(database_path=tmp_path / "recovery.db"))
+    base_time = datetime(2026, 9, 19, 4, 0, tzinfo=timezone.utc)
+    signal = AnomalySignal(
+        signal_id="sig_recovery_001",
+        rule_id="kafka-consumer-down-v1",
+        version=1,
+        fingerprint="kafka:recovery:consumer",
+        severity=DetectionSeverity.HIGH,
+        facts={"topic": "hmdp.seckill.order.create.v1", "consumer_group": "hmdp-seckill-order-create-v1"},
+        observation_refs=("down_1", "down_2"),
+        first_seen=base_time,
+        last_seen=base_time + timedelta(seconds=30),
+        created_at=base_time + timedelta(seconds=30),
+    )
+
+    class DiagnosisStub:
+        def run(self, request, *, incident_id=None):
+            from runtime.reports import DiagnosisReport, DiagnosisRunResult, DiagnosisStatus
+
+            report = DiagnosisReport(
+                report_id="report_recovery_001", incident_id=incident_id,
+                status=DiagnosisStatus.CONFIRMED, title="Kafka failure",
+                conclusion="No consumer members", root_cause="Kafka consumer unavailable",
+                confidence=0.9, evidence_ids=["down_1"],
+            )
+            return DiagnosisRunResult(incident_id=incident_id, report=report)
+
+    with TestClient(app) as client:
+        store = IncidentStore(app.state.database)
+        manager = IncidentManager(store, DiagnosisStub(), clock=lambda: base_time + timedelta(minutes=3))
+        incident = manager.handle_signal(signal).incident
+        assert client.get("/api/monitoring/summary").json()["active_incident_count"] == 1
+        assert manager.confirm_recovery(
+            fingerprint=signal.fingerprint,
+            observation_refs=("healthy_1", "healthy_2"),
+            first_seen=base_time + timedelta(minutes=1),
+            last_seen=base_time + timedelta(minutes=2),
+        ) is not None
+        summary = client.get("/api/monitoring/summary").json()
+        detail = client.get(f"/api/incidents/{incident.incident_id}").json()
+
+    assert summary["health"] == "healthy"
+    assert summary["active_incident_count"] == 0
+    assert detail["status"] == "RECOVERED"
+    assert detail["diagnosis_status"] == "COMPLETED"
+    assert "incident_recovered" in [event["event_type"] for event in detail["traces"]]

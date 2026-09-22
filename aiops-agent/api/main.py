@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Request
 from api.console import ConsoleReader
 from api.schemas import HealthResponse, IncidentCreatedResponse, IncidentRequest
 from config import Settings, get_settings
+from incident.store import IncidentStore
 from llm.factory import build_llm_provider
 from llm.provider import StructuredLLMProvider
 from memory.database import SQLiteDatabase
@@ -33,12 +34,14 @@ def create_app(
         kafka_default_consumer_group=selected_settings.kafka_default_consumer_group,
         kafka_request_timeout_ms=selected_settings.kafka_request_timeout_ms,
         kafka_lag_threshold=selected_settings.kafka_lag_threshold,
+        mysql_health_port=selected_settings.mysql_health_port,
     )
     provider = llm_provider or build_llm_provider(selected_settings)
 
     @asynccontextmanager
     async def lifespan(application: FastAPI):
         database.initialize()
+        IncidentStore(database).initialize()
         application.state.settings = selected_settings
         application.state.database = database
         application.state.console_reader = ConsoleReader(database)
