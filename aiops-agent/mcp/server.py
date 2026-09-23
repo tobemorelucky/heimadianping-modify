@@ -18,7 +18,7 @@ from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp_tools.business_metrics import (
     BusinessMetricsRequest,
-    LogDerivedBusinessMetricsReader,
+    JvmBusinessMetricsReader,
     collect_business_metrics,
 )
 from mcp_tools.kafka_status import (
@@ -283,9 +283,8 @@ def get_kafka_status(
 @server.tool(
     name="get_business_metrics",
     description=(
-        "Derive bounded HMDP seckill request, Lua admission, Kafka send, and order "
-        "creation counters from the allowlisted Spring runtime logs without querying "
-        "Redis, MySQL, or arbitrary metric expressions."
+        "Merge HMDP seckill request, Lua admission, Kafka send, and order creation "
+        "counters from the fixed loopback Web and Consumer JVM observation outlets."
     ),
     structured_output=True,
 )
@@ -304,7 +303,14 @@ def get_business_metrics(
         raise ToolError("business metrics input violates the read-only policy") from exc
     return collect_business_metrics(
         request,
-        reader=LogDerivedBusinessMetricsReader(_project_root()),
+        reader=JvmBusinessMetricsReader(
+            web_port=_positive_int_env("AIOPS_BUSINESS_METRICS_WEB_PORT", 18081),
+            consumer_port=_positive_int_env(
+                "AIOPS_BUSINESS_METRICS_CONSUMER_PORT",
+                18083,
+            ),
+            timeout_seconds=3.0,
+        ),
     )
 
 

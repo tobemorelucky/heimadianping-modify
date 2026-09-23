@@ -58,6 +58,8 @@ class StdioMCPClient:
         kafka_request_timeout_ms: int | None = None,
         kafka_lag_threshold: int | None = None,
         mysql_health_port: int | None = None,
+        business_metrics_web_port: int | None = None,
+        business_metrics_consumer_port: int | None = None,
     ) -> None:
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
@@ -95,6 +97,20 @@ class StdioMCPClient:
         )
         if not 1 <= self.mysql_health_port <= 65535:
             raise ValueError("AIOPS_MYSQL_HEALTH_PORT is invalid")
+        self.business_metrics_web_port = (
+            business_metrics_web_port
+            if business_metrics_web_port is not None
+            else int(os.environ.get("AIOPS_BUSINESS_METRICS_WEB_PORT", "18081"))
+        )
+        self.business_metrics_consumer_port = (
+            business_metrics_consumer_port
+            if business_metrics_consumer_port is not None
+            else int(os.environ.get("AIOPS_BUSINESS_METRICS_CONSUMER_PORT", "18083"))
+        )
+        if not 1 <= self.business_metrics_web_port <= 65535:
+            raise ValueError("AIOPS_BUSINESS_METRICS_WEB_PORT is invalid")
+        if not 1 <= self.business_metrics_consumer_port <= 65535:
+            raise ValueError("AIOPS_BUSINESS_METRICS_CONSUMER_PORT is invalid")
         self._tool_schemas: list[dict[str, Any]] | None = None
 
     def get_tool_schemas(self) -> list[dict[str, Any]]:
@@ -129,6 +145,12 @@ class StdioMCPClient:
                 ),
                 "AIOPS_KAFKA_LAG_THRESHOLD": str(self.kafka_lag_threshold),
                 "AIOPS_MYSQL_HEALTH_PORT": str(self.mysql_health_port),
+                "AIOPS_BUSINESS_METRICS_WEB_PORT": str(
+                    self.business_metrics_web_port
+                ),
+                "AIOPS_BUSINESS_METRICS_CONSUMER_PORT": str(
+                    self.business_metrics_consumer_port
+                ),
             },
         )
 

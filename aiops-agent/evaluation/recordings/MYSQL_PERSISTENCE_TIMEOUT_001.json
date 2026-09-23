@@ -1,0 +1,280 @@
+{
+  "recording_type": "real_environment",
+  "fault_id": "MYSQL_PERSISTENCE_TIMEOUT_001",
+  "captured_at": "2026-09-23T14:57:26+08:00",
+  "source_document": "docs/aiops/20_mysql_fault_injection_observation.md",
+  "environment": "hmdp-aiops-demo; Consumer JDBC via 127.0.0.1:13308 proxy; proxy stopped manually while MySQL remained healthy",
+  "baseline": [
+    {
+      "evidence_id": "evi_e94a87185412492eb7d2c8fba5b5eddb",
+      "status": "success",
+      "kind": "business_metrics",
+      "source": "hmdp.seckill.business_metrics",
+      "source_tool": "get_business_metrics",
+      "collected_at": "2026-09-23T06:54:34.558114Z",
+      "observation_window": null,
+      "summary": "Seckill pipeline counters: requests=1, lua_accepted=1, kafka_sent=1, orders_created=1, orders_failed=0.",
+      "completeness": "complete",
+      "raw_ref": "jvm://hmdp-web+hmdp-consumer/business-metrics",
+      "data": {
+        "seckill_request_count": 1,
+        "lua_admission_success_count": 1,
+        "kafka_message_sent_count": 1,
+        "order_created_success_count": 1,
+        "order_created_failure_count": 0,
+        "observed_metrics": ["seckill_request_count", "lua_admission_success_count", "kafka_message_sent_count", "order_created_success_count", "order_created_failure_count"],
+        "unavailable_metrics": []
+      },
+      "error": null
+    },
+    {
+      "evidence_id": "evi_8f67a2b0c3634ff189a6a1cac34566b9",
+      "status": "success",
+      "kind": "kafka_consumer_status",
+      "source": "hmdp.kafka.consumer_group",
+      "source_tool": "get_kafka_status",
+      "collected_at": "2026-09-23T06:54:36.359381Z",
+      "observation_window": null,
+      "summary": "Kafka group hmdp-aiops-mysql-demo-consumer-v1 state=stable, members=1, total_lag=0, lag_status=normal.",
+      "completeness": "complete",
+      "raw_ref": "kafka://hmdp.aiops.mysql-demo.order.main.v1/hmdp-aiops-mysql-demo-consumer-v1/offsets",
+      "data": {
+        "topic": "hmdp.aiops.mysql-demo.order.main.v1",
+        "consumer_group": "hmdp-aiops-mysql-demo-consumer-v1",
+        "topic_exists": true,
+        "consumer_status": "stable",
+        "member_count": 1,
+        "offsets_complete": true,
+        "partitions_truncated": false,
+        "total_lag": 0,
+        "lag_status": "normal"
+      },
+      "error": null
+    },
+    {
+      "evidence_id": "evi_7528e48419a84d6d925f431d92cffde4",
+      "status": "partial",
+      "kind": "mysql_health",
+      "source": "hmdp-consumer.mysql-health",
+      "source_tool": "get_mysql_health",
+      "collected_at": "2026-09-23T06:54:37.725712Z",
+      "observation_window": null,
+      "summary": "Consumer MySQL connection validation succeeded.",
+      "completeness": "partial",
+      "raw_ref": "http://127.0.0.1/internal/aiops/mysql-health",
+      "data": {
+        "source_role": "hmdp-consumer",
+        "database_reachable": true,
+        "connection_test_status": "valid",
+        "hikari_active": 0,
+        "hikari_idle": 10,
+        "connection_timeout_count": null,
+        "error_count": null,
+        "unavailable_metrics": ["connection_timeout_count", "error_count"]
+      },
+      "error": null
+    }
+  ],
+  "fault": [
+    {
+      "evidence_id": "evi_6fbbd47b3c4e47cd993e4dd63605058c",
+      "status": "success",
+      "kind": "business_metrics",
+      "source": "hmdp.seckill.business_metrics",
+      "source_tool": "get_business_metrics",
+      "collected_at": "2026-09-23T06:57:19.066457Z",
+      "observation_window": null,
+      "summary": "Seckill pipeline counters: requests=3, lua_accepted=3, kafka_sent=3, orders_created=1, orders_failed=4.",
+      "completeness": "complete",
+      "raw_ref": "jvm://hmdp-web+hmdp-consumer/business-metrics",
+      "data": {
+        "seckill_request_count": 3,
+        "lua_admission_success_count": 3,
+        "kafka_message_sent_count": 3,
+        "order_created_success_count": 1,
+        "order_created_failure_count": 4,
+        "observed_metrics": ["seckill_request_count", "lua_admission_success_count", "kafka_message_sent_count", "order_created_success_count", "order_created_failure_count"],
+        "unavailable_metrics": []
+      },
+      "error": null
+    },
+    {
+      "evidence_id": "evi_02aac2621b6c4b45969ebad58ffad733",
+      "status": "success",
+      "kind": "kafka_consumer_status",
+      "source": "hmdp.kafka.consumer_group",
+      "source_tool": "get_kafka_status",
+      "collected_at": "2026-09-23T06:57:21.885238Z",
+      "observation_window": null,
+      "summary": "Kafka group hmdp-aiops-mysql-demo-consumer-v1 state=stable, members=1, total_lag=0, lag_status=normal.",
+      "completeness": "complete",
+      "raw_ref": "kafka://hmdp.aiops.mysql-demo.order.main.v1/hmdp-aiops-mysql-demo-consumer-v1/offsets",
+      "data": {
+        "topic": "hmdp.aiops.mysql-demo.order.main.v1",
+        "consumer_group": "hmdp-aiops-mysql-demo-consumer-v1",
+        "topic_exists": true,
+        "consumer_status": "stable",
+        "member_count": 1,
+        "offsets_complete": true,
+        "partitions_truncated": false,
+        "total_lag": 0,
+        "lag_status": "normal"
+      },
+      "error": null
+    },
+    {
+      "evidence_id": "evi_868f113c61104e0f85a3559243be772d",
+      "status": "partial",
+      "kind": "mysql_health",
+      "source": "hmdp-consumer.mysql-health",
+      "source_tool": "get_mysql_health",
+      "collected_at": "2026-09-23T06:57:26.104285Z",
+      "observation_window": null,
+      "summary": "Consumer MySQL connection validation failed or is unavailable.",
+      "completeness": "partial",
+      "raw_ref": "http://127.0.0.1/internal/aiops/mysql-health",
+      "data": {
+        "source_role": "hmdp-consumer",
+        "database_reachable": null,
+        "connection_test_status": "timeout",
+        "hikari_active": 0,
+        "hikari_idle": 0,
+        "connection_timeout_count": null,
+        "error_count": null,
+        "unavailable_metrics": ["connection_timeout_count", "error_count"]
+      },
+      "error": null
+    }
+  ],
+  "normalized_validation": {
+    "validated_at": "2026-09-23T16:10:34+08:00",
+    "observations": [
+      {
+        "evidence_id": "evi_5cea2b43a47d446597377aa79057c5e4",
+        "status": "success",
+        "kind": "business_metrics",
+        "source": "hmdp.seckill.business_metrics",
+        "source_tool": "get_business_metrics",
+        "collected_at": "2026-09-23T08:07:41.305752Z",
+        "observation_window": null,
+        "summary": "Seckill pipeline counters: requests=0, lua_accepted=0, kafka_sent=0, orders_created=0, orders_failed=0.",
+        "completeness": "complete",
+        "raw_ref": "jvm://hmdp-web+hmdp-consumer/business-metrics",
+        "data": {
+          "incident_id": "monitoring",
+          "seckill_request_count": 0,
+          "lua_admission_success_count": 0,
+          "kafka_message_sent_count": 0,
+          "order_created_success_count": 0,
+          "order_created_failure_count": 0,
+          "observed_metrics": ["kafka_message_sent_count", "lua_admission_success_count", "order_created_failure_count", "order_created_success_count", "seckill_request_count"],
+          "unavailable_metrics": []
+        },
+        "error": null
+      },
+      {
+        "evidence_id": "evi_873299208145413ba307edd62da85957",
+        "status": "success",
+        "kind": "business_metrics",
+        "source": "hmdp.seckill.business_metrics",
+        "source_tool": "get_business_metrics",
+        "collected_at": "2026-09-23T08:10:29.343568Z",
+        "observation_window": null,
+        "summary": "Seckill pipeline counters: requests=2, lua_accepted=2, kafka_sent=2, orders_created=0, orders_failed=3.",
+        "completeness": "complete",
+        "raw_ref": "jvm://hmdp-web+hmdp-consumer/business-metrics",
+        "data": {
+          "incident_id": "monitoring",
+          "seckill_request_count": 2,
+          "lua_admission_success_count": 2,
+          "kafka_message_sent_count": 2,
+          "order_created_success_count": 0,
+          "order_created_failure_count": 3,
+          "observed_metrics": ["kafka_message_sent_count", "lua_admission_success_count", "order_created_failure_count", "order_created_success_count", "seckill_request_count"],
+          "unavailable_metrics": []
+        },
+        "error": null
+      },
+      {
+        "evidence_id": "evi_35f5ad8dafe949ef9cdab897cc87f2ea",
+        "status": "success",
+        "kind": "kafka_consumer_status",
+        "source": "hmdp.kafka.consumer_group",
+        "source_tool": "get_kafka_status",
+        "collected_at": "2026-09-23T08:10:31.484531Z",
+        "observation_window": null,
+        "summary": "Kafka group hmdp-aiops-mysql-demo-consumer-v1 state=stable, members=1, total_lag=0, lag_status=normal.",
+        "completeness": "complete",
+        "raw_ref": "kafka://hmdp.aiops.mysql-demo.order.main.v1/hmdp-aiops-mysql-demo-consumer-v1/offsets",
+        "data": {
+          "topic": "hmdp.aiops.mysql-demo.order.main.v1",
+          "consumer_group": "hmdp-aiops-mysql-demo-consumer-v1",
+          "topic_exists": true,
+          "consumer_status": "stable",
+          "member_count": 1,
+          "offsets_complete": true,
+          "partitions_truncated": false,
+          "total_lag": 0,
+          "lag_status": "normal",
+          "partitions": [{"partition": 0, "committed_offset": 8, "end_offset": 8, "lag": 0}]
+        },
+        "error": null
+      },
+      {
+        "evidence_id": "evi_c0a60ef8b7494181872285288367d737",
+        "status": "partial",
+        "kind": "mysql_health",
+        "source": "hmdp-consumer.mysql-health",
+        "source_tool": "get_mysql_health",
+        "collected_at": "2026-09-23T08:10:34.382790Z",
+        "observation_window": null,
+        "summary": "Consumer MySQL health is degraded or failed: CONNECTION_TIMEOUT",
+        "completeness": "partial",
+        "raw_ref": "http://127.0.0.1/internal/aiops/mysql-health",
+        "data": {
+          "source_role": "hmdp-consumer",
+          "collected_at": "2026-09-23T08:10:32.879824Z",
+          "database_reachable": null,
+          "connection_test_status": "timeout",
+          "hikari_active": 0,
+          "hikari_idle": 0,
+          "connection_timeout_count": null,
+          "error_count": null,
+          "unavailable_metrics": ["connection_timeout_count", "error_count"],
+          "health_state": "DEGRADED",
+          "failure_class": ["CONNECTION_TIMEOUT"],
+          "incident_id": null
+        },
+        "error": null
+      }
+    ],
+    "signal_id": "sig_81e04fec62814faf98ca84e6ddc199b1",
+    "rule_id": "order-persistence-failure-v1",
+    "rule_version": 2,
+    "observation_refs": [
+      "evi_5cea2b43a47d446597377aa79057c5e4",
+      "evi_873299208145413ba307edd62da85957",
+      "evi_35f5ad8dafe949ef9cdab897cc87f2ea",
+      "evi_c0a60ef8b7494181872285288367d737"
+    ],
+    "signal_facts": {
+      "request_delta": 2,
+      "lua_admission_delta": 2,
+      "kafka_publish_delta": 2,
+      "order_success_delta": 0,
+      "order_failure_delta": 3,
+      "member_count": 1,
+      "lag": 0,
+      "mysql_health_state": "DEGRADED",
+      "mysql_failure_class": ["CONNECTION_TIMEOUT"],
+      "database_reachable": null,
+      "connection_test_status": "timeout"
+    },
+    "incident_id": "inc_9409e7bc55144ad99321a6c508ab17d1",
+    "incident_status": "ACTIVE",
+    "diagnosis_status": "COMPLETED",
+    "report_id": "report_cb3178068f7744efb20de4c4dd23b1d5",
+    "root_cause": "MySQL Persistence Failure",
+    "confidence": 0.93
+  }
+}

@@ -55,6 +55,8 @@ class ReflectionEngine:
                 "supports, contradicts, or insufficient. For business metrics, compare "
                 "request, Lua admission, Kafka send, and order creation counters to localize "
                 "the degraded stage without claiming an unobserved dependency as root cause. "
+                "When Kafka status is healthy, contradict the Kafka hypothesis rather than "
+                "claiming MySQL. A Consumer MySQL failure needs its own valid observation. "
                 "Never invent evidence."
             ),
             input_payload={

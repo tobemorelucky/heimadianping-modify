@@ -35,6 +35,10 @@ def create_app(
         kafka_request_timeout_ms=selected_settings.kafka_request_timeout_ms,
         kafka_lag_threshold=selected_settings.kafka_lag_threshold,
         mysql_health_port=selected_settings.mysql_health_port,
+        business_metrics_web_port=selected_settings.business_metrics_web_port,
+        business_metrics_consumer_port=(
+            selected_settings.business_metrics_consumer_port
+        ),
     )
     provider = llm_provider or build_llm_provider(selected_settings)
 
@@ -44,7 +48,10 @@ def create_app(
         IncidentStore(database).initialize()
         application.state.settings = selected_settings
         application.state.database = database
-        application.state.console_reader = ConsoleReader(database)
+        application.state.console_reader = ConsoleReader(
+            database,
+            replay_directory=selected_settings.replay_directory,
+        )
         application.state.llm_provider = provider
         application.state.orchestrator = RuntimeOrchestrator(
             database,

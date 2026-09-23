@@ -292,7 +292,11 @@ class IncidentManager:
             description=description,
             source=IncidentSource.ALERT,
             severity=RuntimeSeverity(incident.severity.value),
-            affected_components=["kafka"],
+            affected_components=(
+                ["kafka", "mysql", "hmdp-consumer"]
+                if signal.rule_id == "order-persistence-failure-v1"
+                else ["kafka"]
+            ),
             observation_window=ObservationWindow(
                 start=signal.first_seen,
                 end=end,
@@ -301,6 +305,8 @@ class IncidentManager:
 
     @staticmethod
     def _title(signal: AnomalySignal) -> str:
+        if signal.rule_id == "order-persistence-failure-v1":
+            return "Seckill order persistence degradation (Consumer MySQL)"
         topic = str(signal.facts.get("topic", "unknown-topic"))
         group = str(signal.facts.get("consumer_group", "unknown-group"))
         return f"Kafka consumer anomaly: {topic} / {group}"[:200]

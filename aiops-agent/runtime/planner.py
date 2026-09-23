@@ -32,6 +32,9 @@ class Planner:
                 "When selected_skill is present, use it only as procedural guidance for "
                 "tool ordering and hypothesis validation. A Skill is not Evidence, cannot "
                 "establish a root cause, and cannot authorize an unregistered tool."
+                " For order persistence incidents, inspect business metrics first,"
+                " then test Kafka consumer health as a competing hypothesis, and"
+                " only when Kafka is contradicted inspect Consumer MySQL health."
             ),
             input_payload={
                 "incident": incident.model_dump(mode="json"),

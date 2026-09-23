@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import socket
 from datetime import datetime
+from enum import Enum
 from typing import Literal, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
@@ -23,6 +24,90 @@ HEALTH_PATH = "/internal/aiops/mysql-health"
 MAX_RESPONSE_BYTES = 4096
 
 
+class MysqlHealthState(str, Enum):
+    HEALTHY = "HEALTHY"
+    DEGRADED = "DEGRADED"
+    FAILED = "FAILED"
+    UNKNOWN = "UNKNOWN"
+
+
+class MysqlFailureClass(str, Enum):
+    DATABASE_UNAVAILABLE = "DATABASE_UNAVAILABLE"
+    CONNECTION_TIMEOUT = "CONNECTION_TIMEOUT"
+    POOL_EXHAUSTED = "POOL_EXHAUSTED"
+    UNKNOWN = "UNKNOWN"
+
+
+class MysqlHealthClassification(BaseModel):
+    """Deterministic normalization derived only from explicit probe facts."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    health_state: MysqlHealthState
+    failure_class: tuple[MysqlFailureClass, ...]
+
+
+def classify_mysql_health(
+    database_reachable: bool | None,
+    connection_test_status: str | None,
+    error_info: str | None = None,
+) -> MysqlHealthClassification:
+    """Normalize controlled status codes without parsing exception messages."""
+
+    status = (connection_test_status or "").strip().lower()
+    error_code = (error_info or "").strip().upper()
+    known_error_codes = {item.value for item in MysqlFailureClass}
+    if error_code and error_code not in known_error_codes:
+        return MysqlHealthClassification(
+            health_state=MysqlHealthState.UNKNOWN,
+            failure_class=(MysqlFailureClass.UNKNOWN,),
+        )
+
+    if database_reachable is True and status == "valid" and not error_code:
+        return MysqlHealthClassification(
+            health_state=MysqlHealthState.HEALTHY,
+            failure_class=(),
+        )
+
+    if (
+        database_reachable is False
+        and status in {"invalid", "connection_failed"}
+    ) or error_code == MysqlFailureClass.DATABASE_UNAVAILABLE.value:
+        return MysqlHealthClassification(
+            health_state=MysqlHealthState.FAILED,
+            failure_class=(MysqlFailureClass.DATABASE_UNAVAILABLE,),
+        )
+
+    if status == "timeout" or error_code == MysqlFailureClass.CONNECTION_TIMEOUT.value:
+        classes = [MysqlFailureClass.CONNECTION_TIMEOUT]
+        if database_reachable is False:
+            classes.insert(0, MysqlFailureClass.DATABASE_UNAVAILABLE)
+        return MysqlHealthClassification(
+            health_state=(
+                MysqlHealthState.FAILED
+                if database_reachable is False
+                else MysqlHealthState.DEGRADED
+            ),
+            failure_class=tuple(classes),
+        )
+
+    if status == "pool_exhausted" or error_code == MysqlFailureClass.POOL_EXHAUSTED.value:
+        if database_reachable is False:
+            return MysqlHealthClassification(
+                health_state=MysqlHealthState.UNKNOWN,
+                failure_class=(MysqlFailureClass.UNKNOWN,),
+            )
+        return MysqlHealthClassification(
+            health_state=MysqlHealthState.DEGRADED,
+            failure_class=(MysqlFailureClass.POOL_EXHAUSTED,),
+        )
+
+    return MysqlHealthClassification(
+        health_state=MysqlHealthState.UNKNOWN,
+        failure_class=(MysqlFailureClass.UNKNOWN,),
+    )
+
+
 class MysqlHealthRequest(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid", str_strip_whitespace=True)
 
@@ -37,7 +122,8 @@ class ConsumerMysqlHealthSnapshot(BaseModel):
     database_reachable: bool | None
     connection_test_status: Literal[
         "valid", "invalid", "connection_failed", "timeout", "busy",
-        "interrupted", "acquisition_error", "probe_error", "unavailable",
+        "interrupted", "acquisition_error", "pool_exhausted", "probe_error",
+        "unavailable",
     ]
     hikari_active: int | None = Field(ge=0)
     hikari_idle: int | None = Field(ge=0)
@@ -120,6 +206,8 @@ def collect_mysql_health(
                 "source_role": None,
                 "expected_source_role": "hmdp-consumer",
                 "incident_id": request.incident_id,
+                "health_state": MysqlHealthState.UNKNOWN.value,
+                "failure_class": [MysqlFailureClass.UNKNOWN.value],
             },
             error=ToolError(
                 error_type=error_type,
@@ -131,6 +219,11 @@ def collect_mysql_health(
         )
 
     fields = snapshot.model_dump(mode="json")
+    classification = classify_mysql_health(
+        snapshot.database_reachable,
+        snapshot.connection_test_status,
+    )
+    fields.update(classification.model_dump(mode="json"))
     unavailable = set(snapshot.unavailable_metrics)
     for name in (
         "hikari_active", "hikari_idle", "connection_timeout_count", "error_count"
@@ -151,8 +244,11 @@ def collect_mysql_health(
         source_tool="get_mysql_health",
         summary=(
             "Consumer MySQL connection validation succeeded."
-            if snapshot.database_reachable is True
-            else "Consumer MySQL connection validation failed or is unavailable."
+            if classification.health_state is MysqlHealthState.HEALTHY
+            else (
+                "Consumer MySQL health is degraded or failed: "
+                + ", ".join(item.value for item in classification.failure_class)
+            )
         ),
         completeness=(
             EvidenceCompleteness.COMPLETE if complete else EvidenceCompleteness.PARTIAL

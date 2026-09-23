@@ -1,0 +1,21 @@
+{
+  "fault_id": "MYSQL_PERSISTENCE_TIMEOUT_001",
+  "name": "Consumer MySQL路径超时导致订单持久化失败",
+  "description": "真实隔离环境中Consumer专属MySQL TCP代理停止；HTTP、Lua和Kafka发送继续成功，Consumer持久化连接获取超时。",
+  "trigger_condition": "业务计数显示Kafka发送后订单创建下降，Kafka Consumer Group健康，MySQL Health规范化为CONNECTION_TIMEOUT。",
+  "expected_root_cause": "MySQL Persistence Failure",
+  "expected_tools": [
+    "get_business_metrics",
+    "get_kafka_status",
+    "get_mysql_health"
+  ],
+  "expected_evidence": [
+    "order_creation_degraded_after_publish",
+    "kafka_consumer_healthy",
+    "consumer_mysql_connection_failed"
+  ],
+  "incident_title": "MySQL Persistence Timeout：Consumer订单持久化异常",
+  "incident_description": "order-persistence-failure-v1从真实Observation识别到Consumer MySQL连接超时；必须保留Kafka健康反证与业务链路证据。",
+  "observation_source": "real_recording",
+  "observation_recording": "evaluation/recordings/MYSQL_PERSISTENCE_TIMEOUT_001.json"
+}

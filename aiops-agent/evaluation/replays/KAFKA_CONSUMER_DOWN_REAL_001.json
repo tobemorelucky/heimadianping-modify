@@ -1,0 +1,47 @@
+{
+  "schema_version": "1.0",
+  "recording_type": "recorded_observation",
+  "fault_id": "KAFKA_CONSUMER_DOWN_REAL_001",
+  "scenario": "Kafka Consumer Down · Real",
+  "captured_at": "2026-09-22T11:03:21+08:00",
+  "source": "aiops-agent/data/p222_real_20260922.db",
+  "incident_id": "inc_f501c4c1bc92463887be3935ad96b2f2",
+  "title": "Kafka consumer unavailable with accumulating seckill lag",
+  "description": "真实双 JVM 演示中 hmdp-consumer 独立停止，Web 继续经 HTTP 和 Kafka Producer 接受订单；连续 Kafka Observation 显示无活跃成员且 lag=3。",
+  "severity": "high",
+  "status": "ACTIVE",
+  "diagnosis_status": "COMPLETED",
+  "runtime_status": "awaiting_human",
+  "created_at": "2026-09-22T02:58:33.702785Z",
+  "updated_at": "2026-09-22T02:58:35.902768Z",
+  "trigger_signal_ids": ["sig_417888aaa8b24356aee296d1ed64c44d"],
+  "traces": [
+    {"event_id":"signal:sig_417888aaa8b24356aee296d1ed64c44d","event_type":"anomaly_detected","raw_event_type":"anomaly_detected","source":"anomaly_signal","stage":"detector","summary":"kafka-consumer-down-v1 matched two consecutive real Kafka windows.","payload":{"signal_id":"sig_417888aaa8b24356aee296d1ed64c44d","severity":"high"},"created_at":"2026-09-22T02:58:33.652702Z","sequence":0},
+    {"event_id":"itrace_2b10159bc2f544b0a86a0d551e77643d","event_type":"incident_created","raw_event_type":"incident_created","source":"incident_manager","stage":"incident_manager","summary":"Created proactive Incident from anomaly signal.","payload":{},"created_at":"2026-09-22T02:58:33.710754Z","sequence":1},
+    {"event_id":"itrace_b897df4cf6554164bc0a24c24972f22a","event_type":"diagnosis_started","raw_event_type":"diagnosis_started","source":"incident_manager","stage":"incident_manager","summary":"Started the existing Agent Runtime for proactive diagnosis.","payload":{},"created_at":"2026-09-22T02:58:33.733857Z","sequence":2},
+    {"event_id":"trace_6a68268af22b401cadb9c50f29d66728","event_type":"skill_selected","raw_event_type":"skill_selected","source":"runtime","stage":"skill_runtime","summary":"Selected Kafka Consumer Diagnosis for this Incident.","payload":{"skill_id":"kafka-consumer-diagnosis","version":"1.0"},"created_at":"2026-09-22T02:58:33.775440Z","sequence":3},
+    {"event_id":"trace_6b62c02454244f0e895c1c6a07a79cbb","event_type":"skill_loaded","raw_event_type":"skill_loaded","source":"runtime","stage":"skill_runtime","summary":"Loaded Kafka Consumer Diagnosis on demand.","payload":{"skill_id":"kafka-consumer-diagnosis","version":"1.0"},"created_at":"2026-09-22T02:58:33.789756Z","sequence":4},
+    {"event_id":"trace_0ec6f3a476804c018f062eea4ed93fdd","event_type":"plan_created","raw_event_type":"plan_created","source":"runtime","stage":"planner","summary":"Planned a read-only Kafka consumer-group status check.","payload":{"hypothesis":"Kafka Consumer Failure","version":1},"created_at":"2026-09-22T02:58:33.818716Z","sequence":5},
+    {"event_id":"trace_hyp_kafka_created","event_type":"hypothesis_created","raw_event_type":"hypothesis_created","source":"runtime","stage":"reasoning","summary":"Kafka Consumer Failure","payload":{"hypothesis_id":"hyp_095581277c2941f7b0baddd2c1224a2e","status":"UNKNOWN","confidence":0.0},"created_at":"2026-09-22T02:58:33.835489Z","sequence":6},
+    {"event_id":"trace_273463fb51bd4f5490dd136ab20f9a5a","event_type":"tool_called","raw_event_type":"tool_started","source":"runtime","stage":"evidence_collector","summary":"Starting MCP tool get_kafka_status.","payload":{"tool_name":"get_kafka_status"},"created_at":"2026-09-22T02:58:33.852770Z","sequence":7},
+    {"event_id":"trace_578386ba35004aef9be33b027d59501d","event_type":"tool_completed","raw_event_type":"tool_completed","source":"runtime","stage":"evidence_collector","summary":"get_kafka_status returned a successful real Observation.","payload":{"tool_name":"get_kafka_status","status":"success","evidence_id":"evi_37fcc6522ff04f5eaa3c754e41973199"},"created_at":"2026-09-22T02:58:35.770930Z","sequence":8},
+    {"event_id":"trace_015a820057af45e6beffad0703a30488","event_type":"evidence_created","raw_event_type":"evidence_added","source":"runtime","stage":"context","summary":"Consumer group has no active members and total lag is 3.","payload":{"evidence_id":"evi_37fcc6522ff04f5eaa3c754e41973199","source_tool":"get_kafka_status"},"created_at":"2026-09-22T02:58:35.789439Z","sequence":9},
+    {"event_id":"trace_79cfac7c07dd4061828514090adb1557","event_type":"hypothesis_updated","raw_event_type":"hypothesis_updated","source":"runtime","stage":"reflection","summary":"Kafka consumer unavailability is supported by member_count=0 and positive lag.","payload":{"hypothesis_id":"hyp_095581277c2941f7b0baddd2c1224a2e","hypothesis":"Kafka Consumer Failure","status":"SUPPORTED","confidence":0.9,"decision":"report","supporting_evidence_refs":["evi_37fcc6522ff04f5eaa3c754e41973199"],"contradicting_evidence_refs":[]},"created_at":"2026-09-22T02:58:35.816485Z","sequence":10},
+    {"event_id":"trace_1f5aaef9a0ca42e4b750fecec6d61656","event_type":"reflection_completed","raw_event_type":"reflection_completed","source":"runtime","stage":"reflection","summary":"Reflection selected report after evidence validation.","payload":{"decision":"report"},"created_at":"2026-09-22T02:58:35.824049Z","sequence":11},
+    {"event_id":"trace_69e1c18634024521836075b14bcf3095","event_type":"report_generated","raw_event_type":"report_generated","source":"runtime","stage":"reporter","summary":"Kafka consumer JVM is unavailable and order messages are accumulating.","payload":{"report_id":"report_752c33a91f794036a0ab140ae09e6ecf","root_cause":"Kafka Consumer Failure","status":"confirmed"},"created_at":"2026-09-22T02:58:35.855994Z","sequence":12},
+    {"event_id":"itrace_80ef8a62fb634f6d8842fbd7df0361a6","event_type":"diagnosis_completed","raw_event_type":"diagnosis_completed","source":"incident_manager","stage":"incident_manager","summary":"Agent Runtime completed proactive diagnosis.","payload":{"outcome":"success","report_id":"report_752c33a91f794036a0ab140ae09e6ecf"},"created_at":"2026-09-22T02:58:35.885437Z","sequence":13},
+    {"event_id":"itrace_0c39b15a90e0473688083f708d340505","event_type":"action_proposal_created","raw_event_type":"action_proposal_created","source":"incident_manager","stage":"incident_manager","summary":"Created a non-executable restart_consumer proposal.","payload":{"proposal_id":"proposal_ae41d0b3da034b939bb0b9f6aa4a9c30","action_name":"restart_consumer","risk_level":"low","approval_required":true,"evidence_refs":["evi_37fcc6522ff04f5eaa3c754e41973199"]},"created_at":"2026-09-22T02:58:35.894831Z","sequence":14},
+    {"event_id":"itrace_7b65205982314690948bb2bf54a1a817","event_type":"permission_checked","raw_event_type":"permission_checked","source":"incident_manager","stage":"incident_manager","summary":"Permission Gateway requires explicit human approval.","payload":{"proposal_id":"proposal_ae41d0b3da034b939bb0b9f6aa4a9c30","decision":"REQUIRE_APPROVAL"},"created_at":"2026-09-22T02:58:35.902768Z","sequence":15}
+  ],
+  "evidence": [
+    {"evidence_id":"evi_37fcc6522ff04f5eaa3c754e41973199","kind":"kafka_consumer_status","source":"hmdp.kafka.consumer_group","source_tool":"get_kafka_status","status":"success","summary":"Kafka group state=empty, members=0, total_lag=3, lag_status=abnormal.","facts":["topic: hmdp.aiops.p22.20260921.main","consumer_group: hmdp-aiops-p22-20260921-main","consumer_status: empty","member_count: 0","total_lag: 3","lag_status: abnormal"],"completeness":"complete","collected_at":"2026-09-22T02:58:35.593848Z"}
+  ],
+  "hypotheses": [
+    {"hypothesis_id":"hyp_095581277c2941f7b0baddd2c1224a2e","description":"Kafka Consumer Failure","status":"SUPPORTED","confidence":0.9,"supporting_evidence_refs":["evi_37fcc6522ff04f5eaa3c754e41973199"],"contradicting_evidence_refs":[],"history":[{"created_at":"2026-09-22T02:58:33.835489Z","status":"UNKNOWN","confidence":0.0,"event_type":"hypothesis_created"},{"created_at":"2026-09-22T02:58:35.816485Z","status":"SUPPORTED","confidence":0.9,"event_type":"hypothesis_updated"}]}
+  ],
+  "report": {"report_id":"report_752c33a91f794036a0ab140ae09e6ecf","status":"confirmed","title":"Kafka Consumer Down diagnosis","conclusion":"Consumer group has no active members while the dedicated topic has positive lag; this explains delayed order persistence.","root_cause":"Kafka Consumer Failure","confidence":0.9,"evidence_ids":["evi_37fcc6522ff04f5eaa3c754e41973199"],"generated_at":"2026-09-22T02:58:35.847050Z"},
+  "proposals": [
+    {"proposal_id":"proposal_ae41d0b3da034b939bb0b9f6aa4a9c30","incident_id":"inc_f501c4c1bc92463887be3935ad96b2f2","action_name":"restart_consumer","reason":"Kafka consumer is unavailable and lag is accumulating.","evidence_refs":["evi_37fcc6522ff04f5eaa3c754e41973199"],"risk_level":"low","approval_required":true,"permission_result":"REQUIRE_APPROVAL","verification_plan":"Verify member_count > 0 and lag drains after human-approved recovery.","rollback_plan":"Stop the restarted demo consumer if it joins the wrong group."}
+  ],
+  "evaluation": {"expected_root_cause":"Kafka Consumer Failure","expected_tools":["get_kafka_status"],"expected_evidence_kinds":["kafka_consumer_status"],"anomaly_expected":true}
+}

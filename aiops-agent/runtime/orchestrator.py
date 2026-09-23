@@ -112,6 +112,24 @@ class RuntimeOrchestrator:
                 incident.incident_id,
                 IncidentStatus.PLANNING,
             )
+            if "mysql" in incident.affected_components:
+                for description in ("Kafka Consumer Failure", "MySQL Persistence Failure"):
+                    seeded = hypothesis_ledger.create(description)
+                    self.database.save_hypothesis(
+                        incident.incident_id,
+                        seeded,
+                        "Seeded competing hypotheses for Consumer persistence incident.",
+                    )
+                    record(
+                        TraceEventType.HYPOTHESIS_CREATED,
+                        "reasoning",
+                        description,
+                        payload={
+                            "hypothesis_id": seeded.hypothesis_id,
+                            "status": seeded.status.value,
+                            "confidence": seeded.confidence,
+                        },
+                    )
             matched_skills = self.skill_registry.match_skills(incident)
             if matched_skills:
                 selected_metadata = matched_skills[0]

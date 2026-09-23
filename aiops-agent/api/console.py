@@ -7,8 +7,10 @@ display-safe evidence facts instead of raw tool observations or log lines.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
+from evaluation.replay_catalog import ReplayCatalog
 from memory.database import SQLiteDatabase
 
 
@@ -39,8 +41,15 @@ def _json(value: str | None, fallback: Any) -> Any:
 class ConsoleReader:
     """Compose persisted Runtime, Monitoring, and Incident Manager records."""
 
-    def __init__(self, database: SQLiteDatabase) -> None:
+    def __init__(
+        self,
+        database: SQLiteDatabase,
+        replay_directory: Path | str | None = None,
+    ) -> None:
         self.database = database
+        self.replay_catalog = (
+            ReplayCatalog(replay_directory) if replay_directory is not None else None
+        )
 
     @staticmethod
     def _tables(connection: Any) -> set[str]:
@@ -93,13 +102,20 @@ class ConsoleReader:
                     lifecycle["trigger_signal_ids_json"], []
                 ) if lifecycle else [],
             })
+        live_ids = {item["incident_id"] for item in combined}
+        if self.replay_catalog is not None:
+            combined.extend(
+                replay.summary()
+                for replay in self.replay_catalog.discover()
+                if replay.incident_id not in live_ids
+            )
         combined.sort(key=lambda item: (item["created_at"], item["incident_id"]), reverse=True)
         return combined[:limit] if limit is not None else combined
 
     def monitoring_summary(self) -> dict[str, Any]:
         incidents = self.list_incidents(limit=None)
         active_count = sum(
-            item["status"] == "ACTIVE"
+            item["status"] == "ACTIVE" and not item.get("replay_only", False)
             for item in incidents
         )
         latest = None
@@ -130,6 +146,9 @@ class ConsoleReader:
         )
         if summary is None:
             return None
+        if summary.get("replay_only"):
+            replay = self.replay_catalog.get(incident_id) if self.replay_catalog else None
+            return replay.detail() if replay is not None else None
         with self.database.connect() as connection:
             tables = self._tables(connection)
             traces: list[dict[str, Any]] = []

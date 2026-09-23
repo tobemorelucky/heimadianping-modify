@@ -117,6 +117,31 @@ class FaultEvaluator:
                     if isinstance(event, dict)
                 ):
                     observed.add("consumer_stopped_log")
+            if kind == "business_metrics":
+                sent = data.get("kafka_message_sent_count")
+                created = data.get("order_created_success_count")
+                if type(sent) is int and type(created) is int and sent > 0 and created / sent < 0.8:
+                    observed.add("order_creation_degraded_after_publish")
+            if kind == "kafka_consumer_status":
+                if (
+                    type(data.get("member_count")) is int
+                    and data["member_count"] > 0
+                    and data.get("lag_status") == "normal"
+                    and data.get("offsets_complete") is True
+                ):
+                    observed.add("kafka_consumer_healthy")
+            if kind == "mysql_health":
+                failure_classes = data.get("failure_class", [])
+                if (
+                    data.get("source_role") == "hmdp-consumer"
+                    and isinstance(failure_classes, list)
+                    and set(failure_classes).intersection({
+                        "DATABASE_UNAVAILABLE",
+                        "CONNECTION_TIMEOUT",
+                        "POOL_EXHAUSTED",
+                    })
+                ):
+                    observed.add("consumer_mysql_connection_failed")
 
         expected = set(case.expected_evidence)
         missing = expected - observed

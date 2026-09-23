@@ -277,6 +277,36 @@ class ObservationStore:
             )
         return observations
 
+    def list_observations_across_schedules(
+        self, *, since: datetime, until: datetime
+    ) -> list[StoredObservation]:
+        """Read a bounded, ordered cross-tool window for correlation rules."""
+
+        for value in (since, until):
+            if value.tzinfo is None or value.utcoffset() is None:
+                raise ValueError("observation query timestamps must include a timezone")
+        if until < since:
+            raise ValueError("observation query until must not precede since")
+        with self.database.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT collection_run_id, schedule_id, timestamp, observation_json
+                FROM monitoring_collection_runs
+                WHERE timestamp >= ? AND timestamp <= ?
+                ORDER BY timestamp, rowid
+                """,
+                (since.isoformat(), until.isoformat()),
+            ).fetchall()
+        return [
+            StoredObservation(
+                collection_run_id=row["collection_run_id"],
+                schedule_id=row["schedule_id"],
+                timestamp=datetime.fromisoformat(row["timestamp"]),
+                observation=ToolObservation.model_validate_json(row["observation_json"]),
+            )
+            for row in rows
+        ]
+
     def list_trace_events(self, schedule_id: str | None = None) -> list[dict[str, Any]]:
         query = "SELECT * FROM monitoring_trace_events"
         parameters: tuple[str, ...] = ()

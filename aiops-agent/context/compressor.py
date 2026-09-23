@@ -525,6 +525,14 @@ class MysqlHealthEvidenceCompressor:
 
         facts = [
             f"source_role={display(data.get('source_role'))}.",
+            f"health_state={display(data.get('health_state'))}.",
+            "failure_class="
+            + (
+                ",".join(str(item) for item in data.get("failure_class", []))
+                if isinstance(data.get("failure_class"), list)
+                else "unavailable"
+            )
+            + ".",
             f"database_reachable={display(data.get('database_reachable'))}.",
             f"connection_test_status={display(data.get('connection_test_status'))}.",
             f"hikari_active={display(data.get('hikari_active'))}; "

@@ -18,7 +18,9 @@ from llm.factory import build_llm_provider
 from memory.database import SQLiteDatabase
 from monitoring.collector import MonitoringCollector
 from monitoring.detector.detector import DeterministicAnomalyDetector
-from monitoring.detector.rules import kafka_consumer_down_rule
+from monitoring.detector.rules import (
+    kafka_consumer_down_rule, order_persistence_failure_rule,
+)
 from monitoring.detector.signal_store import SignalStore
 from monitoring.models import (
     CollectionResult,
@@ -27,7 +29,9 @@ from monitoring.models import (
     utc_now,
 )
 from monitoring.observation_store import ObservationStore
-from monitoring.schedules import default_kafka_schedule
+from monitoring.schedules import (
+    default_business_schedule, default_kafka_schedule, default_mysql_schedule,
+)
 from runtime.mcp_client import StdioMCPClient
 from runtime.orchestrator import RuntimeOrchestrator
 from runtime.tool_registry import ToolRegistry
@@ -66,6 +70,15 @@ class MonitoringScheduler:
             self.observation_store.list_enabled_schedules()
             if force
             else self.observation_store.list_due_schedules(tick_time)
+        )
+        tool_priority = {
+            "get_business_metrics": 0,
+            "get_kafka_status": 1,
+            "get_mysql_health": 2,
+        }
+        schedules = sorted(
+            schedules,
+            key=lambda item: (tool_priority.get(item.tool_name, 3), item.schedule_id),
         )
         results: list[CollectionResult] = []
         for schedule in schedules:
@@ -141,6 +154,8 @@ def build_local_scheduler() -> MonitoringScheduler:
         kafka_request_timeout_ms=settings.kafka_request_timeout_ms,
         kafka_lag_threshold=settings.kafka_lag_threshold,
         mysql_health_port=settings.mysql_health_port,
+        business_metrics_web_port=settings.business_metrics_web_port,
+        business_metrics_consumer_port=settings.business_metrics_consumer_port,
     )
     registry = ToolRegistry.from_file()
     collector = MonitoringCollector(client, registry, store)
@@ -149,6 +164,9 @@ def build_local_scheduler() -> MonitoringScheduler:
     signal_store.ensure_rule(
         kafka_consumer_down_rule(lag_threshold=settings.kafka_lag_threshold)
     )
+    signal_store.ensure_rule(order_persistence_failure_rule(
+        max_kafka_lag=settings.kafka_lag_threshold
+    ))
     detector = DeterministicAnomalyDetector(store, signal_store)
     incident_store = IncidentStore(database)
     incident_store.initialize()
@@ -175,6 +193,12 @@ def build_local_scheduler() -> MonitoringScheduler:
             timeout_seconds=min(settings.mcp_tool_timeout_seconds, 60.0),
         )
     )
+    scheduler.ensure_schedule(default_business_schedule(
+        timeout_seconds=min(settings.mcp_tool_timeout_seconds, 60.0)
+    ))
+    scheduler.ensure_schedule(default_mysql_schedule(
+        timeout_seconds=min(settings.mcp_tool_timeout_seconds, 60.0)
+    ))
     return scheduler
 
 

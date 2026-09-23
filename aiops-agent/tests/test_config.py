@@ -21,6 +21,16 @@ def test_process_environment_overrides_dotenv_values(tmp_path):
     assert settings.port == 8120
     assert settings.log_level == "WARNING"
     assert settings.database_path == database_path.resolve()
+    assert settings.replay_directory is None
+
+
+def test_replay_catalog_is_explicitly_enabled_and_resolved(tmp_path):
+    replay_directory = tmp_path / "replays"
+    settings = load_settings(
+        environ={"AIOPS_REPLAY_DIRECTORY": str(replay_directory)}
+    )
+
+    assert settings.replay_directory == replay_directory.resolve()
 
 
 def test_configuration_rejects_non_loopback_host():
@@ -48,3 +58,15 @@ def test_kafka_readonly_settings_are_loaded_from_environment():
     assert settings.kafka_default_consumer_group == "custom-order-group"
     assert settings.kafka_request_timeout_ms == 2500
     assert settings.kafka_lag_threshold == 42
+
+
+def test_business_metrics_loopback_ports_are_loaded_from_environment():
+    settings = load_settings(
+        environ={
+            "AIOPS_BUSINESS_METRICS_WEB_PORT": "18181",
+            "AIOPS_BUSINESS_METRICS_CONSUMER_PORT": "18183",
+        }
+    )
+
+    assert settings.business_metrics_web_port == 18181
+    assert settings.business_metrics_consumer_port == 18183

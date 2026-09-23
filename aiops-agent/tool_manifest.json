@@ -104,7 +104,7 @@
     },
     {
       "tool_name": "get_business_metrics",
-      "description": "Derive bounded HMDP seckill request, Lua admission, Kafka send, and order creation counters from the allowlisted Spring runtime logs without querying Redis, MySQL, or arbitrary metric expressions.",
+      "description": "Merge HMDP seckill request, Lua admission, Kafka send, and order creation counters from the fixed loopback Web and Consumer JVM observation outlets.",
       "input_schema": {
         "type": "object",
         "properties": {

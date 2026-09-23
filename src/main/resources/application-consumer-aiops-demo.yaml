@@ -1,0 +1,52 @@
+spring:
+  application:
+    name: hmdp-consumer-aiops-demo
+  main:
+    web-application-type: none
+  datasource:
+    # Consumer alone traverses the recoverable TCP fault boundary. Web remains
+    # on the direct demo MySQL port (13307).
+    url: ${AIOPS_DEMO_CONSUMER_MYSQL_URL:jdbc:mysql://127.0.0.1:13308/hmdp?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true}
+    username: ${AIOPS_DEMO_MYSQL_USERNAME:root}
+    password: ${AIOPS_DEMO_MYSQL_ROOT_PASSWORD:123456}
+  redis:
+    host: 127.0.0.1
+    port: ${AIOPS_DEMO_REDIS_PORT:16379}
+  jackson:
+    # The read-only health contract preserves unavailable metrics as explicit nulls.
+    default-property-inclusion: always
+  kafka:
+    bootstrap-servers: ${AIOPS_DEMO_KAFKA_BOOTSTRAP_SERVERS:127.0.0.1:29092}
+    consumer:
+      group-id: hmdp-aiops-mysql-demo-consumer-v1
+
+canal:
+  enabled: false
+
+seckill:
+  message:
+    mode: kafka
+
+hmdp:
+  aiops:
+    mysql-health:
+      enabled: true
+      port: ${AIOPS_DEMO_MYSQL_HEALTH_PORT:18082}
+      probe-timeout-ms: 1500
+    business-metrics:
+      enabled: true
+      role: hmdp-consumer
+      port: ${AIOPS_DEMO_CONSUMER_METRICS_PORT:18083}
+  kafka:
+    listener:
+      enabled: true
+    topics:
+      voucher-order: hmdp.aiops.mysql-demo.order.main.v1
+      voucher-order-retry: hmdp.aiops.mysql-demo.order.retry.v1
+      voucher-order-dlt: hmdp.aiops.mysql-demo.order.dlt.v1
+    consumer:
+      retry-group-id: hmdp-aiops-mysql-demo-retry-v1
+      dlt-group-id: hmdp-aiops-mysql-demo-dlt-v1
+  seckill:
+    redis-stream-consumer:
+      enabled: false

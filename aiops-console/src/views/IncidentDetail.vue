@@ -48,7 +48,7 @@ const tools = computed(() => incident.value?.traces.filter(event => event.event_
     <AgentOffline v-else-if="offline" :retry="load" />
     <div v-else-if="error" class="error-banner" role="alert">{{ error }}</div>
     <template v-else-if="incident">
-      <div class="page-heading incident-heading"><div><span v-if="incident.demo_scenario" class="eyebrow">FAULTBENCH DEMO / {{ incident.demo_fault_id }}</span><span v-else class="eyebrow">INCIDENT / {{ incident.incident_id }}</span><h1>{{ incident.demo_scenario || incident.title }}<span class="heading-dot">.</span></h1><p v-if="incident.demo_scenario">秒杀订单异步创建延迟。Agent 将依据 Kafka 状态、应用日志及当前 Evidence 验证故障假设。</p><p v-else>{{ incident.description || '由监控异常信号触发的 Agent 诊断任务。' }}</p><small v-if="incident.demo_scenario" class="incident-original-title" :title="incident.title">Incident title: {{ incident.title }}</small></div><div class="incident-actions"><span class="status-chip large" :class="incident.status.toLowerCase()">Incident · {{ incident.status }}</span><span class="status-chip large" :class="(incident.diagnosis_status || '').toLowerCase()">Diagnosis · {{ incident.diagnosis_status || 'NOT STARTED' }}</span><button type="button" class="ghost-button" :aria-pressed="replayMode" @click="replayMode = !replayMode">{{ replayMode ? '退出 Replay' : '▶ Replay' }}</button></div></div>
+      <div class="page-heading incident-heading"><div><span v-if="incident.replay_only" class="eyebrow">RECORDED INCIDENT / {{ incident.demo_fault_id }}</span><span v-else-if="incident.demo_scenario" class="eyebrow">FAULTBENCH DEMO / {{ incident.demo_fault_id }}</span><span v-else class="eyebrow">INCIDENT / {{ incident.incident_id }}</span><h1>{{ incident.demo_scenario || incident.title }}<span class="heading-dot">.</span></h1><p>{{ incident.description || '由监控异常信号触发的 Agent 诊断任务。' }}</p><small v-if="incident.demo_scenario" class="incident-original-title" :title="incident.title">Incident title: {{ incident.title }}</small></div><div class="incident-actions"><span v-if="incident.replay_only" class="status-chip large recorded">READ-ONLY RECORDING</span><span class="status-chip large" :class="incident.status.toLowerCase()">Incident · {{ incident.status }}</span><span class="status-chip large" :class="(incident.diagnosis_status || '').toLowerCase()">Diagnosis · {{ incident.diagnosis_status || 'NOT STARTED' }}</span><button type="button" class="ghost-button" :aria-pressed="replayMode" @click="replayMode = !replayMode">{{ replayMode ? '退出 Replay' : '▶ Replay' }}</button></div></div>
       <div class="meta-strip"><span><b>CREATED</b>{{ formatTime(incident.created_at) }}</span><span><b>SEVERITY</b>{{ incident.severity }}</span><span><b>AGENT RUNTIME</b>{{ incident.runtime_status || 'not started' }}</span><span><b>TRIGGER SIGNALS</b>{{ incident.trigger_signal_ids.length }}</span></div>
       <TraceReplay v-if="replayMode" :incident="incident" />
       <div v-else class="detail-layout">
@@ -83,5 +83,9 @@ const tools = computed(() => incident.value?.traces.filter(event => event.event_
 .status-chip.recovered {
   color: #75ddba;
   background: #203d38;
+}
+.status-chip.recorded {
+  color: #b8c8ff;
+  background: #27304d;
 }
 </style>

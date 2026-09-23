@@ -7,7 +7,13 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any
 
-from monitoring.detector.models import AnomalySignal, DetectionRule
+from monitoring.detector.models import (
+    AnomalySignal, DetectionRule, KafkaConsumerDownCondition,
+    OrderPersistenceFailureCondition,
+)
+from monitoring.detector.order_persistence import (
+    DetectionAssessment, assess_order_persistence,
+)
 from monitoring.detector.signal_store import SignalStore
 from monitoring.models import (
     CollectionResult,
@@ -42,11 +48,16 @@ class DeterministicAnomalyDetector:
         """Evaluate all active rules matching the latest Observation kind."""
 
         observation = result.observation
-        if observation.status is not ObservationStatus.SUCCESS:
+        if observation.status in {ObservationStatus.ERROR, ObservationStatus.TIMEOUT}:
             return []
         signals: list[AnomalySignal] = []
         for rule in self.signal_store.list_active_rules(observation.kind):
-            signal = self._evaluate_rule(rule, result)
+            if isinstance(rule.condition, OrderPersistenceFailureCondition):
+                signal = self._evaluate_order_persistence(rule, result)
+            elif observation.status is ObservationStatus.SUCCESS:
+                signal = self._evaluate_rule(rule, result)
+            else:
+                signal = None
             if signal is not None:
                 signals.append(signal)
         return signals
@@ -59,6 +70,8 @@ class DeterministicAnomalyDetector:
             return []
         confirmations: list[RecoveryConfirmation] = []
         for rule in self.signal_store.list_active_rules(current.kind):
+            if not isinstance(rule.condition, KafkaConsumerDownCondition):
+                continue
             values = self._fingerprint_values(current, rule.fingerprint_fields)
             if values is None:
                 continue
@@ -173,6 +186,76 @@ class DeterministicAnomalyDetector:
                     "observation_refs": list(signal.observation_refs),
                 },
                 created_at=window_end,
+            )
+        )
+        return signal
+
+    def assess_order_persistence(
+        self, rule: DetectionRule, result: CollectionResult
+    ) -> DetectionAssessment:
+        """Expose insufficient vs non-matching for deterministic tests and audits."""
+
+        if not isinstance(rule.condition, OrderPersistenceFailureCondition):
+            raise ValueError("order persistence rule required")
+        history = self.observation_store.list_observations_across_schedules(
+            since=result.run.timestamp - timedelta(seconds=rule.lookback_window),
+            until=result.run.timestamp,
+        )
+        return assess_order_persistence(history, result.observation, rule.condition)
+
+    def _evaluate_order_persistence(
+        self, rule: DetectionRule, result: CollectionResult
+    ) -> AnomalySignal | None:
+        assessment = self.assess_order_persistence(rule, result)
+        if assessment.outcome != "matched":
+            return None
+        fingerprint = self._build_fingerprint(rule, {
+            "topic": assessment.facts["topic"],
+            "consumer_group": assessment.facts["consumer_group"],
+            "source_role": assessment.facts["source_role"],
+        })
+        previous = self.signal_store.latest_signal(
+            rule_id=rule.rule_id, version=rule.version, fingerprint=fingerprint
+        )
+        if previous is not None and result.run.timestamp < (
+            previous.last_seen + timedelta(seconds=rule.cooldown)
+        ):
+            return None
+        signal = AnomalySignal(
+            rule_id=rule.rule_id,
+            version=rule.version,
+            fingerprint=fingerprint,
+            severity=rule.severity,
+            facts=assessment.facts,
+            observation_refs=assessment.observation_refs,
+            first_seen=next(
+                (
+                    item.timestamp for item in self.observation_store.list_observations_across_schedules(
+                        since=result.run.timestamp - timedelta(seconds=rule.lookback_window),
+                        until=result.run.timestamp,
+                    )
+                    if item.observation.evidence_id == assessment.observation_refs[0]
+                ),
+                result.run.timestamp,
+            ),
+            last_seen=result.run.timestamp,
+            created_at=result.run.timestamp,
+        )
+        self.signal_store.save_signal(signal)
+        self.observation_store.save_trace_event(
+            MonitoringTraceEvent(
+                schedule_id=result.run.schedule_id,
+                collection_run_id=result.run.collection_run_id,
+                event_type=TraceEventType.ANOMALY_DETECTED,
+                summary=f"Rule {rule.rule_id} emitted correlated anomaly signal.",
+                payload={
+                    "signal_id": signal.signal_id,
+                    "rule_id": signal.rule_id,
+                    "fingerprint": signal.fingerprint,
+                    "facts": signal.facts,
+                    "observation_refs": list(signal.observation_refs),
+                },
+                created_at=result.run.timestamp,
             )
         )
         return signal

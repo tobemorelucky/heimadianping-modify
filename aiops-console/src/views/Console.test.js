@@ -105,6 +105,43 @@ describe('AIOps Console', () => {
     expect(wrapper.text()).toContain('0 / 4 EVENTS')
   })
 
+  it('renders the recorded MySQL path with Kafka contradiction and final support', async () => {
+    getIncident.mockResolvedValue({
+      incident_id: 'inc_mysql_real', title: 'Consumer MySQL persistence failure',
+      description: '真实 Recorded Observation 回放', demo_scenario: 'MySQL Persistence Failure · Real',
+      demo_fault_id: 'MYSQL_PERSISTENCE_TIMEOUT_001', replay_only: true,
+      status: 'ACTIVE', diagnosis_status: 'COMPLETED', severity: 'high', runtime_status: 'awaiting_human',
+      created_at: '2026-09-23T08:10:34Z', trigger_signal_ids: ['sig_mysql'],
+      traces: [
+        { event_id: 't1', event_type: 'skill_selected', created_at: '2026-09-23T08:10:34Z', summary: 'Selected skill', payload: { skill_id: 'kafka-consumer-diagnosis', version: '1.0' } },
+        { event_id: 't2', event_type: 'tool_called', created_at: '2026-09-23T08:10:35Z', summary: 'Business', payload: { tool_name: 'get_business_metrics' } },
+        { event_id: 't3', event_type: 'tool_called', created_at: '2026-09-23T08:10:36Z', summary: 'Kafka', payload: { tool_name: 'get_kafka_status' } },
+        { event_id: 't4', event_type: 'tool_called', created_at: '2026-09-23T08:10:37Z', summary: 'MySQL', payload: { tool_name: 'get_mysql_health' } }
+      ],
+      evidence: [
+        { evidence_id: 'e1', kind: 'business_metrics', source_tool: 'get_business_metrics', status: 'success', summary: 'orders created=0', facts: ['kafka_message_sent_count: 2', 'order_created_success_count: 0'], collected_at: '2026-09-23T08:10:35Z' },
+        { evidence_id: 'e2', kind: 'kafka_consumer_status', source_tool: 'get_kafka_status', status: 'success', summary: 'Kafka healthy', facts: ['member_count: 1', 'total_lag: 0'], collected_at: '2026-09-23T08:10:36Z' },
+        { evidence_id: 'e3', kind: 'mysql_health', source_tool: 'get_mysql_health', status: 'partial', summary: 'CONNECTION_TIMEOUT', facts: ['health_state: DEGRADED'], collected_at: '2026-09-23T08:10:37Z' }
+      ],
+      hypotheses: [
+        { hypothesis_id: 'h1', description: 'Kafka Consumer Failure', status: 'CONTRADICTED', confidence: 0.1, history: [{ status: 'UNKNOWN', confidence: 0 }, { status: 'CONTRADICTED', confidence: 0.1 }] },
+        { hypothesis_id: 'h2', description: 'MySQL Persistence Failure', status: 'SUPPORTED', confidence: 0.93, history: [{ status: 'UNKNOWN', confidence: 0 }, { status: 'SUPPORTED', confidence: 0.93 }] }
+      ],
+      report: { status: 'confirmed', root_cause: 'MySQL Persistence Failure', conclusion: 'Kafka healthy; MySQL timed out', confidence: 0.93 },
+      proposals: []
+    })
+
+    const wrapper = mount(IncidentDetail, { props: { id: 'inc_mysql_real' }, global: { stubs: { RouterLink: routerLink } } })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('READ-ONLY RECORDING')
+    expect(wrapper.text()).toContain('get_business_metrics')
+    expect(wrapper.text()).toContain('get_mysql_health')
+    expect(wrapper.text()).toContain('CONTRADICTED 10%')
+    expect(wrapper.text()).toContain('SUPPORTED 93%')
+    expect(wrapper.text()).toContain('MySQL Persistence Failure')
+  })
+
   it('shows Agent Offline on Incident Detail when the API is unreachable', async () => {
     getIncident.mockRejectedValue(new Error('connection refused'))
     const wrapper = mount(IncidentDetail, { props: { id: 'inc_kafka_demo' }, global: { stubs: { RouterLink: routerLink } } })

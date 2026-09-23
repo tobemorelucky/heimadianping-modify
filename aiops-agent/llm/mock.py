@@ -66,6 +66,14 @@ class MockLLMProvider(StructuredLLMProvider):
                 for card in context_cards
                 if isinstance(card, dict)
             )
+            already_checked_mysql = any(
+                card.get("kind") == "mysql_health"
+                for card in context_cards if isinstance(card, dict)
+            )
+            mysql_signal = any(
+                keyword in incident_text
+                for keyword in ("order-persistence-failure-v1", "mysql persistence", "mysql 持久化")
+            )
             business_signal = any(
                 keyword in incident_text
                 for keyword in ("business metrics", "business pipeline", "业务指标", "业务链路")
@@ -76,10 +84,13 @@ class MockLLMProvider(StructuredLLMProvider):
                 for card in context_cards
                 if isinstance(card, dict)
             )
-            if business_signal and not already_checked_business_metrics:
+            if (business_signal or mysql_signal) and not already_checked_business_metrics:
                 return {
                     "objective": "比较秒杀请求、Lua 准入、Kafka 发送和订单创建计数。",
-                    "hypothesis": "秒杀业务链路可能在某个阶段出现转化下降。",
+                    "hypothesis": (
+                        "Kafka Consumer Failure" if mysql_signal
+                        else "秒杀业务链路可能在某个阶段出现转化下降。"
+                    ),
                     "tool_name": "get_business_metrics",
                     "arguments": {"incident_id": incident_id},
                 }
@@ -88,13 +99,23 @@ class MockLLMProvider(StructuredLLMProvider):
                 for keyword in ("kafka", "lag", "consumer", "消息", "消费", "积压")
             )
             if (
-                (kafka_signal or downstream_order_degradation)
+                (kafka_signal or downstream_order_degradation or mysql_signal)
                 and not already_checked_kafka
             ):
                 return {
                     "objective": "检查 Kafka 消费者组状态和消息积压。",
-                    "hypothesis": "订单延迟可能由 Kafka 消费停滞或 lag 异常导致。",
+                    "hypothesis": (
+                        "Kafka Consumer Failure" if mysql_signal
+                        else "订单延迟可能由 Kafka 消费停滞或 lag 异常导致。"
+                    ),
                     "tool_name": "get_kafka_status",
+                    "arguments": {},
+                }
+            if mysql_signal and already_checked_kafka and not already_checked_mysql:
+                return {
+                    "objective": "验证 hmdp-consumer 的 MySQL 连接测试及连接池状态。",
+                    "hypothesis": "MySQL Persistence Failure",
+                    "tool_name": "get_mysql_health",
                     "arguments": {},
                 }
             return {
@@ -113,6 +134,7 @@ class MockLLMProvider(StructuredLLMProvider):
 
         if operation == "reflect":
             observation = payload["context"]["latest_observation"]
+            current_hypothesis = payload.get("current_hypothesis", "")
             status = observation.get("status")
             if status in {"error", "timeout"}:
                 hypothesis_status = (
@@ -138,13 +160,21 @@ class MockLLMProvider(StructuredLLMProvider):
                 if interpretation == "supports_downstream_order_creation_degradation":
                     return {
                         "decision": "replan",
-                        "hypothesis": "异常位于 Kafka 发送之后、订单创建完成之前。",
-                        "hypothesis_status": "supports",
+                        "hypothesis": (
+                            "Kafka Consumer Failure" if current_hypothesis == "Kafka Consumer Failure"
+                            else "异常位于 Kafka 发送之后、订单创建完成之前。"
+                        ),
+                        "hypothesis_status": (
+                            "insufficient" if current_hypothesis == "Kafka Consumer Failure"
+                            else "supports"
+                        ),
                         "reason": (
                             "业务指标显示请求、Lua 准入和 Kafka 发送计数一致，"
                             "但订单创建成功率下降；应继续检查 Consumer 状态和应用日志。"
                         ),
-                        "confidence": 0.88,
+                        "confidence": (
+                            0.35 if current_hypothesis == "Kafka Consumer Failure" else 0.88
+                        ),
                     }
                 if interpretation == "contradicts_business_pipeline_degradation":
                     return {
@@ -189,10 +219,15 @@ class MockLLMProvider(StructuredLLMProvider):
                 ):
                     return {
                         "decision": "replan",
-                        "hypothesis": "Kafka 消费停滞假设被当前状态反驳。",
+                        "hypothesis": (
+                            "Kafka Consumer Failure" if current_hypothesis == "Kafka Consumer Failure"
+                            else "Kafka 消费停滞假设被当前状态反驳。"
+                        ),
                         "hypothesis_status": "contradicts",
                         "reason": "Kafka Evidence 显示消费者组稳定、有成员且 lag 正常。",
-                        "confidence": 0.85,
+                        "confidence": (
+                            0.1 if current_hypothesis == "Kafka Consumer Failure" else 0.85
+                        ),
                     }
                 return {
                     "decision": "inconclusive",
@@ -200,6 +235,47 @@ class MockLLMProvider(StructuredLLMProvider):
                     "hypothesis_status": "insufficient",
                     "reason": "Kafka 状态或 offset 数据不完整。",
                     "confidence": 0.25,
+                }
+
+            if observation.get("kind") == "mysql_health":
+                fact_text = " ".join(facts).casefold()
+                prior_cards = payload["context"].get("evidence_cards", [])
+                business_supported = any(
+                    card.get("kind") == "business_metrics"
+                    and card.get("interpretation") == "supports_downstream_order_creation_degradation"
+                    for card in prior_cards if isinstance(card, dict)
+                )
+                kafka_contradicted = any(
+                    card.get("kind") == "kafka_consumer_status"
+                    and card.get("interpretation") == "contradicts_kafka_consumer_unavailable_hypothesis"
+                    for card in prior_cards if isinstance(card, dict)
+                )
+                if (
+                    business_supported
+                    and kafka_contradicted
+                    and "source_role=hmdp-consumer" in fact_text
+                    and any(
+                        failure_class.casefold() in fact_text
+                        for failure_class in (
+                            "DATABASE_UNAVAILABLE",
+                            "CONNECTION_TIMEOUT",
+                            "POOL_EXHAUSTED",
+                        )
+                    )
+                ):
+                    return {
+                        "decision": "report",
+                        "hypothesis": "MySQL Persistence Failure",
+                        "hypothesis_status": "supports",
+                        "reason": "Consumer MySQL 连接测试失败；此前业务转化下降且 Kafka 消费状态正常。",
+                        "confidence": 0.93,
+                    }
+                return {
+                    "decision": "inconclusive",
+                    "hypothesis": current_hypothesis,
+                    "hypothesis_status": "insufficient",
+                    "reason": "Consumer MySQL 状态正常或关键字段不可用，不能确认数据库根因。",
+                    "confidence": 0.2,
                 }
 
             error_count_match = next(

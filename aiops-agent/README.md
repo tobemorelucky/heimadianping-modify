@@ -464,6 +464,34 @@ npm run dev
 
 访问 `http://127.0.0.1:5173`，进入 Kafka Incident，可查看 `故障 Fixture → Incident → Agent 诊断 → Report → Proposal（仅展示）`。不运行演示种子时，空库 Dashboard 显示 Healthy。更多说明见 `aiops-console/README.md`。
 
+## 产品化双场景 Replay（Phase P5）
+
+本项目不是聊天 Agent。产品演示主线是：
+
+```text
+Monitoring → Detection → Incident → Diagnosis → Governance
+```
+
+已完成的 Kafka Consumer Down 与 MySQL Persistence Failure 真实事故被导出为经过 Pydantic 校验的只读 Replay 投影。导入只复制历史快照，不创建 RuntimeOrchestrator，不调用 LLM/MCP，也不重新生成诊断：
+
+```powershell
+cd aiops-agent
+.\.venv\Scripts\python.exe -m evaluation.replay_catalog
+$env:AIOPS_DATABASE_PATH = './data/product-demo.db'
+$env:AIOPS_REPLAY_DIRECTORY = './data/console-replays'
+.\.venv\Scripts\python.exe -m uvicorn api.main:app --host 127.0.0.1 --port 8010
+```
+
+Console API 将实时 SQLite Incident 与 Replay Catalog 合并。Replay Incident 带 `replay_only=true` 和 `recording_type=recorded_observation`；历史 ACTIVE 状态不会计入当前健康摘要。Kafka Replay 展示 Skill、Kafka Tool、Evidence 与支持假设；MySQL Replay 展示 Business Metrics、Kafka 反证、MySQL timeout Evidence 与最终支持假设。
+
+生成统一的双场景 FaultBench 报告：
+
+```powershell
+.\.venv\Scripts\python.exe -m evaluation.benchmark_report
+```
+
+输出 `evaluation/reports/FAULTBENCH_PRODUCT_DEMO.json`，包含 Accuracy、Evidence Coverage、Tool Efficiency、Trace Completeness 和 False Positive。所有 Proposal 都是展示与权限审计数据，没有执行器。
+
 ## 安全边界
 
 - 服务默认只监听 `127.0.0.1`。

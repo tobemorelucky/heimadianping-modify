@@ -42,9 +42,9 @@ onMounted(refresh)
       </section>
       <section class="panel incident-panel"><div class="section-head"><div><span class="eyebrow">RECENT ACTIVITY</span><h2>Recent incidents</h2></div><span class="count-label">{{ incidents.length }} TOTAL</span></div>
         <div v-if="!incidents.length" class="empty-state"><div class="empty-symbol">✓</div><h3>Healthy</h3><p>当前没有 Incident。巡检记录出现异常时，会在这里显示诊断任务。</p></div>
-        <div v-else class="incident-list"><RouterLink v-for="incident in incidents" :key="incident.incident_id" class="incident-row" :to="`/incidents/${incident.incident_id}`"><span class="incident-status-dot" :class="incident.status.toLowerCase()"></span><span class="incident-main"><strong>{{ incident.demo_scenario || incident.title }}</strong><small>{{ shortId(incident.incident_id) }} · {{ incident.source }}</small></span><span class="incident-side"><span class="status-chip" :class="incident.status.toLowerCase()">{{ incident.status }}</span><time>{{ formatTime(incident.created_at) }}</time></span><span class="row-arrow">↗</span></RouterLink></div>
+        <div v-else class="incident-list"><RouterLink v-for="incident in incidents" :key="incident.incident_id" class="incident-row" :to="`/incidents/${incident.incident_id}`"><span class="incident-status-dot" :class="incident.status.toLowerCase()"></span><span class="incident-main"><strong>{{ incident.demo_scenario || incident.title }}</strong><small>{{ shortId(incident.incident_id) }} · {{ incident.replay_only ? 'recorded replay' : incident.source }}</small></span><span class="incident-side"><span v-if="incident.replay_only" class="status-chip recorded">RECORDED</span><span class="status-chip" :class="incident.status.toLowerCase()">{{ incident.status }}</span><time>{{ formatTime(incident.created_at) }}</time></span><span class="row-arrow">↗</span></RouterLink></div>
       </section>
-      <div class="flow-strip"><span>OBSERVATION</span><i>→</i><span>INCIDENT</span><i>→</i><span>AGENT DIAGNOSIS</span><i>→</i><span>HUMAN REVIEW</span></div>
+      <div class="flow-strip"><span>MONITORING</span><i>→</i><span>DETECTION</span><i>→</i><span>DIAGNOSIS</span><i>→</i><span>GOVERNANCE</span></div>
     </template>
   </div>
 </template>

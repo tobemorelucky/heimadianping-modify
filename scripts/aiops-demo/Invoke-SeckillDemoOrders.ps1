@@ -5,6 +5,7 @@ param(
     [long]$VoucherId = 0,
     [int]$Stock = 10,
     [string]$BaseUrl = 'http://127.0.0.1:8081',
+    [ValidateSet('default', 'aiops-demo')][string]$Infrastructure = 'default',
     [switch]$IUnderstandLocalTestData
 )
 
@@ -30,6 +31,17 @@ if ($VoucherId -eq 0 -and $Stock -lt $Phones.Count) {
 
 $projectRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 $baseUrl = $BaseUrl.TrimEnd('/')
+$composeFile = if ($Infrastructure -eq 'aiops-demo') {
+    Join-Path $projectRoot 'docker-compose.aiops-demo.yml'
+} else {
+    Join-Path $projectRoot 'docker-compose.yml'
+}
+$composeProject = if ($Infrastructure -eq 'aiops-demo') {
+    'hmdp-aiops-demo'
+} else {
+    'hmdp-local'
+}
+$redisService = if ($Infrastructure -eq 'aiops-demo') { 'redis-demo' } else { 'redis' }
 
 function Assert-HmdpSuccess {
     param([Parameter(Mandatory = $true)]$Response, [Parameter(Mandatory = $true)][string]$Stage)
@@ -66,7 +78,8 @@ try {
         Assert-HmdpSuccess -Response $sent -Stage 'Request local login code'
 
         # The code is read only to complete the normal HTTP login. Never print it or the token.
-        $codeLines = & docker compose exec -T redis redis-cli --raw GET "login:code:$phone" 2>$null
+        $codeLines = & docker compose --project-name $composeProject --file $composeFile `
+            exec --no-TTY $redisService redis-cli --raw GET "login:code:$phone" 2>$null
         if ($LASTEXITCODE -ne 0) {
             throw 'Could not read the local demo login code from the Docker Redis container.'
         }

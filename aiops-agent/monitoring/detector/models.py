@@ -59,6 +59,38 @@ class KafkaConsumerDownCondition(BaseModel):
     consecutive_windows: int = Field(default=2, ge=1, le=100)
 
 
+class OrderPersistenceFailureCondition(BaseModel):
+    """Correlate active business traffic with healthy Kafka and failed MySQL."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    condition_type: Literal["order_persistence_failure"] = "order_persistence_failure"
+    min_request_delta: int = Field(default=1, ge=1)
+    min_lua_admission_ratio: float = Field(default=0.9, ge=0, le=1)
+    min_kafka_publish_ratio: float = Field(default=0.9, ge=0, le=1)
+    max_order_success_ratio: float = Field(default=0.8, ge=0, le=1)
+    max_kafka_lag: int = Field(default=1_000, ge=0)
+    supported_mysql_failure_classes: tuple[
+        Literal[
+            "DATABASE_UNAVAILABLE",
+            "CONNECTION_TIMEOUT",
+            "POOL_EXHAUSTED",
+        ],
+        ...,
+    ] = (
+        "DATABASE_UNAVAILABLE",
+        "CONNECTION_TIMEOUT",
+        "POOL_EXHAUSTED",
+    )
+
+    @field_validator("supported_mysql_failure_classes")
+    @classmethod
+    def unique_mysql_failure_classes(cls, values: tuple[str, ...]) -> tuple[str, ...]:
+        if not values or len(values) != len(set(values)):
+            raise ValueError("supported MySQL failure classes must be non-empty and unique")
+        return values
+
+
 class DetectionRule(BaseModel):
     """Versioned deterministic rule persisted independently of schedules."""
 
@@ -67,7 +99,9 @@ class DetectionRule(BaseModel):
     rule_id: str = Field(pattern=r"^[a-z0-9._-]+$", min_length=1, max_length=128)
     version: int = Field(ge=1)
     source_kind: str = Field(min_length=1, max_length=64)
-    condition: KafkaConsumerDownCondition
+    condition: KafkaConsumerDownCondition | OrderPersistenceFailureCondition = Field(
+        discriminator="condition_type"
+    )
     severity: DetectionSeverity
     fingerprint_fields: tuple[str, ...] = Field(min_length=1, max_length=20)
     lookback_window: int

@@ -11,7 +11,10 @@ from context.manager import ContextManager
 from context.packet import ContextStage
 from mcp_tools.mysql_health import (
     ConsumerMysqlHealthSnapshot,
+    MysqlFailureClass,
+    MysqlHealthState,
     MysqlHealthRequest,
+    classify_mysql_health,
     collect_mysql_health,
 )
 from runtime.mcp_client import StdioMCPClient
@@ -57,6 +60,8 @@ def test_healthy_database_preserves_real_pool_values_and_missing_counters():
     assert result.source_tool == "get_mysql_health"
     assert result.data["source_role"] == "hmdp-consumer"
     assert result.data["database_reachable"] is True
+    assert result.data["health_state"] == "HEALTHY"
+    assert result.data["failure_class"] == []
     assert result.data["hikari_active"] == 2
     assert result.data["hikari_idle"] == 3
     assert result.data["connection_timeout_count"] is None
@@ -74,6 +79,42 @@ def test_unreachable_database_is_not_conflated_with_tool_failure():
     assert result.status is ObservationStatus.PARTIAL
     assert result.data["database_reachable"] is False
     assert result.data["connection_test_status"] == "connection_failed"
+    assert result.data["health_state"] == "FAILED"
+    assert result.data["failure_class"] == ["DATABASE_UNAVAILABLE"]
+
+
+def test_null_reachability_with_probe_timeout_is_connection_timeout():
+    result = collect_mysql_health(
+        MysqlHealthRequest(),
+        reader=StaticReader(snapshot(
+            database_reachable=None,
+            connection_test_status="timeout",
+            hikari_active=0,
+            hikari_idle=0,
+        )),
+    )
+
+    assert result.status is ObservationStatus.PARTIAL
+    assert result.data["health_state"] == "DEGRADED"
+    assert result.data["failure_class"] == ["CONNECTION_TIMEOUT"]
+
+
+def test_unknown_error_information_is_not_guessed():
+    classification = classify_mysql_health(
+        None,
+        "probe_error",
+        error_info="some-free-form-driver-error",
+    )
+
+    assert classification.health_state is MysqlHealthState.UNKNOWN
+    assert classification.failure_class == (MysqlFailureClass.UNKNOWN,)
+
+
+def test_pool_exhaustion_has_an_explicit_deterministic_classification():
+    classification = classify_mysql_health(None, "pool_exhausted")
+
+    assert classification.health_state is MysqlHealthState.DEGRADED
+    assert classification.failure_class == (MysqlFailureClass.POOL_EXHAUSTED,)
 
 
 def test_missing_hikari_metrics_are_null_and_explicit():
@@ -110,6 +151,8 @@ def test_endpoint_timeout_is_structured():
     )
     assert result.status is ObservationStatus.TIMEOUT
     assert result.error.error_type == "HealthEndpointTimeout"
+    assert result.data["health_state"] == "UNKNOWN"
+    assert result.data["failure_class"] == ["UNKNOWN"]
 
 
 def test_manifest_authorizes_only_readonly_mysql_tool():
@@ -138,6 +181,7 @@ def test_context_packet_keeps_consumer_health_facts_without_raw_data():
 
     assert packet.latest_observation.kind == "mysql_health"
     assert "hikari_active=2" in " ".join(packet.latest_observation.facts)
+    assert "health_state=HEALTHY" in " ".join(packet.latest_observation.facts)
     assert "connection_timeout_count=unavailable" in " ".join(packet.latest_observation.facts)
     assert "data" not in packet.latest_observation.model_dump()
 
@@ -175,3 +219,5 @@ def test_runtime_calls_mysql_health_through_stdio_mcp(tmp_path):
     assert result["source_tool"] == "get_mysql_health"
     assert result["data"]["source_role"] == "hmdp-consumer"
     assert result["data"]["database_reachable"] is True
+    assert result["data"]["health_state"] == "HEALTHY"
+    assert result["data"]["failure_class"] == []

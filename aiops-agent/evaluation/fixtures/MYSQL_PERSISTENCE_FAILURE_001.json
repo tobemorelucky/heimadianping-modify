@@ -1,0 +1,38 @@
+{
+  "scenario": "mysql_persistence_failure",
+  "fault_id": "MYSQL_PERSISTENCE_FAILURE_001",
+  "timestamp": "2026-09-22T10:15:00+08:00",
+  "kafka": {
+    "topic": "hmdp.seckill.order.create.v1",
+    "consumer_group": "hmdp-seckill-order-create-v1",
+    "lag": 0,
+    "member_count": 1,
+    "severity": "low"
+  },
+  "business_metrics": {
+    "seckill_request_count": 100,
+    "lua_admission_success_count": 98,
+    "kafka_message_sent_count": 97,
+    "order_created_success_count": 12,
+    "order_created_failure_count": 85
+  },
+  "mysql_health": {
+    "source_role": "hmdp-consumer",
+    "database_reachable": false,
+    "connection_test_status": "connection_failed",
+    "health_state": "FAILED",
+    "failure_class": [
+      "DATABASE_UNAVAILABLE"
+    ],
+    "hikari_active": null,
+    "hikari_idle": null,
+    "connection_timeout_count": null,
+    "error_count": null,
+    "unavailable_metrics": [
+      "hikari_active",
+      "hikari_idle",
+      "connection_timeout_count",
+      "error_count"
+    ]
+  }
+}

@@ -14,6 +14,8 @@ from evaluation.schemas import (
     EvaluationReport,
     FaultCase,
     FaultFixture,
+    MysqlPersistenceFixture,
+    RealObservationRecording,
     FinalDiagnosis,
     TraceSummary,
 )
@@ -32,7 +34,7 @@ DEFAULT_FAULT_ID = "KAFKA_CONSUMER_DOWN_001"
 class FixtureMCPClient:
     """Manifest-compatible deterministic MCP boundary for FaultBench only."""
 
-    def __init__(self, fixture: FaultFixture) -> None:
+    def __init__(self, fixture: FaultFixture | MysqlPersistenceFixture) -> None:
         self.fixture = fixture
         self.registry = ToolRegistry.from_file()
 
@@ -56,13 +58,20 @@ class FixtureMCPClient:
             return self._kafka_observation().model_dump(mode="json")
         if tool_name == "search_application_logs":
             return self._log_observation().model_dump(mode="json")
+        if tool_name == "get_business_metrics" and isinstance(self.fixture, MysqlPersistenceFixture):
+            return self._business_observation().model_dump(mode="json")
+        if tool_name == "get_mysql_health" and isinstance(self.fixture, MysqlPersistenceFixture):
+            return self._mysql_observation().model_dump(mode="json")
         raise ValueError(f"fixture does not implement tool: {tool_name}")
 
     def _kafka_observation(self) -> ToolObservation:
         kafka = self.fixture.kafka
         lag_status = "abnormal" if kafka.lag > 0 else "normal"
         consumer_status = "empty" if kafka.member_count == 0 else "stable"
-        collected_at = self.fixture.log.timestamp - timedelta(seconds=1)
+        collected_at = (
+            self.fixture.timestamp if isinstance(self.fixture, MysqlPersistenceFixture)
+            else self.fixture.log.timestamp - timedelta(seconds=1)
+        )
         return ToolObservation(
             evidence_id=f"evi_{self.fixture.fault_id.lower()}_kafka",
             status=ObservationStatus.SUCCESS,
@@ -104,6 +113,8 @@ class FixtureMCPClient:
         )
 
     def _log_observation(self) -> ToolObservation:
+        if isinstance(self.fixture, MysqlPersistenceFixture):
+            raise ValueError("MySQL fixture has no log observation")
         log = self.fixture.log
         return ToolObservation(
             evidence_id=f"evi_{self.fixture.fault_id.lower()}_log",
@@ -131,6 +142,37 @@ class FixtureMCPClient:
             },
         )
 
+    def _business_observation(self) -> ToolObservation:
+        assert isinstance(self.fixture, MysqlPersistenceFixture)
+        metrics = self.fixture.business_metrics
+        return ToolObservation(
+            evidence_id=f"evi_{self.fixture.fault_id.lower()}_business",
+            status=ObservationStatus.SUCCESS,
+            kind="business_metrics",
+            source="hmdp.seckill.business_metrics",
+            source_tool="get_business_metrics",
+            collected_at=self.fixture.timestamp - timedelta(seconds=2),
+            summary="Fixture: requests and Kafka sends continue while order creation drops.",
+            completeness=EvidenceCompleteness.COMPLETE,
+            raw_ref=f"fixture://{self.fixture.fault_id}/business",
+            data={**metrics.model_dump(mode="json"), "unavailable_metrics": []},
+        )
+
+    def _mysql_observation(self) -> ToolObservation:
+        assert isinstance(self.fixture, MysqlPersistenceFixture)
+        return ToolObservation(
+            evidence_id=f"evi_{self.fixture.fault_id.lower()}_mysql",
+            status=ObservationStatus.PARTIAL,
+            kind="mysql_health",
+            source="hmdp-consumer.mysql-health",
+            source_tool="get_mysql_health",
+            collected_at=self.fixture.timestamp + timedelta(seconds=1),
+            summary="Consumer MySQL connection validation failed.",
+            completeness=EvidenceCompleteness.PARTIAL,
+            raw_ref=f"fixture://{self.fixture.fault_id}/mysql",
+            data=self.fixture.mysql_health.model_dump(mode="json"),
+        )
+
 
 class EvaluationRunner:
     """Run an immutable case and optionally persist a deterministic JSON report."""
@@ -147,7 +189,7 @@ class EvaluationRunner:
     def run(
         self,
         case: FaultCase,
-        fixture: FaultFixture,
+        fixture: FaultFixture | MysqlPersistenceFixture,
         *,
         save_report: bool = True,
     ) -> EvaluationReport:
@@ -168,7 +210,10 @@ class EvaluationRunner:
                     title=case.incident_title,
                     description=case.incident_description,
                     source=IncidentSource.FAULTBENCH,
-                    affected_components=["kafka"],
+                    affected_components=(
+                        ["kafka", "mysql", "hmdp-consumer"]
+                        if isinstance(fixture, MysqlPersistenceFixture) else ["kafka"]
+                    ),
                     budget=IncidentBudget(
                         max_tool_calls=4,
                         max_reflections=2,
@@ -240,7 +285,11 @@ class EvaluationRunner:
         return output_path
 
     @staticmethod
-    def _provider(case: FaultCase, fixture: FaultFixture) -> MockLLMProvider:
+    def _provider(
+        case: FaultCase, fixture: FaultFixture | MysqlPersistenceFixture
+    ) -> MockLLMProvider:
+        if isinstance(fixture, MysqlPersistenceFixture):
+            return MockLLMProvider()
         kafka = fixture.kafka
         return MockLLMProvider(
             scripted_responses={
@@ -309,8 +358,17 @@ def load_fault_case(path: Path | str) -> FaultCase:
     return FaultCase.model_validate_json(Path(path).read_text(encoding="utf-8"))
 
 
-def load_fault_fixture(path: Path | str) -> FaultFixture:
-    return FaultFixture.model_validate_json(Path(path).read_text(encoding="utf-8"))
+def load_real_observation_recording(path: Path | str) -> RealObservationRecording:
+    return RealObservationRecording.model_validate_json(
+        Path(path).read_text(encoding="utf-8")
+    )
+
+
+def load_fault_fixture(path: Path | str) -> FaultFixture | MysqlPersistenceFixture:
+    payload = json.loads(Path(path).read_text(encoding="utf-8"))
+    if payload.get("scenario") == "mysql_persistence_failure":
+        return MysqlPersistenceFixture.model_validate(payload)
+    return FaultFixture.model_validate(payload)
 
 
 def main() -> None:

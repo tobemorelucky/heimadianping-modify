@@ -49,6 +49,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- 仅用于旁路业务指标观测，不改变秒杀、Kafka 或事务实现。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
         <!-- Kafka 基础设施依赖，版本由 Spring Boot 统一管理。 -->
         <dependency>
             <groupId>org.springframework.kafka</groupId>

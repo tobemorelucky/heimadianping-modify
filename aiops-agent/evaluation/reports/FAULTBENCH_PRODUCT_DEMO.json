@@ -1,0 +1,43 @@
+{
+  "report_id": "HMDP_FAULTBENCH_PRODUCT_DEMO_V1",
+  "source": "recorded_observation_replays",
+  "scenario_count": 2,
+  "scenarios": [
+    {
+      "fault_id": "KAFKA_CONSUMER_DOWN_REAL_001",
+      "scenario": "Kafka Consumer Down · Real",
+      "accuracy": 1.0,
+      "evidence_coverage": 1.0,
+      "tool_efficiency": 1.0,
+      "trace_completeness": 1.0,
+      "false_positive": false,
+      "tool_calls": [
+        "get_kafka_status"
+      ]
+    },
+    {
+      "fault_id": "MYSQL_PERSISTENCE_TIMEOUT_001",
+      "scenario": "MySQL Persistence Failure · Real",
+      "accuracy": 1.0,
+      "evidence_coverage": 1.0,
+      "tool_efficiency": 1.0,
+      "trace_completeness": 1.0,
+      "false_positive": false,
+      "tool_calls": [
+        "get_business_metrics",
+        "get_kafka_status",
+        "get_mysql_health"
+      ]
+    }
+  ],
+  "aggregate": {
+    "accuracy": 1.0,
+    "evidence_coverage": 1.0,
+    "tool_efficiency": 1.0,
+    "trace_completeness": 1.0,
+    "false_positive_count": 0,
+    "negative_case_count": 0,
+    "false_positive_rate": null,
+    "false_positive_assessment": "not_applicable_no_negative_cases"
+  }
+}

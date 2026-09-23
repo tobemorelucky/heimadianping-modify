@@ -1,0 +1,19 @@
+{
+  "fault_id": "MYSQL_PERSISTENCE_FAILURE_001",
+  "name": "Kafka 正常但订单持久化失败",
+  "description": "秒杀请求、Lua 准入、Kafka 发送正常，Consumer 订单创建下降。",
+  "trigger_condition": "业务计数增量异常、Kafka Consumer 正常且 Consumer MySQL 连接测试失败；三源关联。",
+  "expected_root_cause": "MySQL Persistence Failure",
+  "expected_tools": [
+    "get_business_metrics",
+    "get_kafka_status",
+    "get_mysql_health"
+  ],
+  "expected_evidence": [
+    "order_creation_degraded_after_publish",
+    "kafka_consumer_healthy",
+    "consumer_mysql_connection_failed"
+  ],
+  "incident_title": "MySQL Persistence Failure：秒杀订单创建异常",
+  "incident_description": "order-persistence-failure-v1 检测到订单创建下降；请先证伪 Kafka Consumer Failure，再检查 Consumer MySQL。"
+}

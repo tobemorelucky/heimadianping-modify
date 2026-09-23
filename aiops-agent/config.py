@@ -25,6 +25,7 @@ class Settings(BaseModel):
     host: str = "127.0.0.1"
     port: int = Field(default=8010, ge=1, le=65535)
     database_path: Path = PROJECT_ROOT / "data" / "aiops.db"
+    replay_directory: Path | None = None
     log_level: str = "INFO"
     ai_model_provider: Literal["mock", "openai_compatible"] = "mock"
     ai_model_base_url: str | None = None
@@ -51,6 +52,8 @@ class Settings(BaseModel):
     kafka_request_timeout_ms: int = Field(default=3000, ge=250, le=30000)
     kafka_lag_threshold: int = Field(default=1000, ge=0, le=1_000_000_000)
     mysql_health_port: int = Field(default=18082, ge=1, le=65535)
+    business_metrics_web_port: int = Field(default=18081, ge=1, le=65535)
+    business_metrics_consumer_port: int = Field(default=18083, ge=1, le=65535)
 
     @field_validator("host")
     @classmethod
@@ -61,7 +64,7 @@ class Settings(BaseModel):
             raise ValueError("AIOPS_HOST must be a loopback address")
         return value
 
-    @field_validator("database_path", mode="before")
+    @field_validator("database_path", "replay_directory", mode="before")
     @classmethod
     def resolve_database_path(cls, value: object) -> Path:
         """Resolve relative database paths against the project directory."""
@@ -107,6 +110,7 @@ def load_settings(
         "host": ("AIOPS_HOST",),
         "port": ("AIOPS_PORT",),
         "database_path": ("AIOPS_DATABASE_PATH",),
+        "replay_directory": ("AIOPS_REPLAY_DIRECTORY",),
         "log_level": ("AIOPS_LOG_LEVEL",),
         "ai_model_provider": ("AI_MODEL_PROVIDER",),
         "ai_model_base_url": ("AI_MODEL_BASE_URL", "BASE_URL", "DOUBAO_BASE_URL"),
@@ -121,6 +125,10 @@ def load_settings(
         "kafka_request_timeout_ms": ("AIOPS_KAFKA_REQUEST_TIMEOUT_MS",),
         "kafka_lag_threshold": ("AIOPS_KAFKA_LAG_THRESHOLD",),
         "mysql_health_port": ("AIOPS_MYSQL_HEALTH_PORT",),
+        "business_metrics_web_port": ("AIOPS_BUSINESS_METRICS_WEB_PORT",),
+        "business_metrics_consumer_port": (
+            "AIOPS_BUSINESS_METRICS_CONSUMER_PORT",
+        ),
     }
     values: dict[str, str] = {}
     for field_name, environment_names in field_mapping.items():

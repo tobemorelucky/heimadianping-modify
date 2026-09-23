@@ -63,11 +63,13 @@ def degraded_counters() -> dict[str, int]:
 
 
 def call_metrics(tmp_path, counters: dict[str, int]) -> dict:
-    client = StdioMCPClient(project_root=create_metric_project(tmp_path, counters=counters))
-    return client.call(
-        "get_business_metrics",
-        {"incident_id": "inc_business_metrics_test"},
+    result = collect_business_metrics(
+        BusinessMetricsRequest(incident_id="inc_business_metrics_test"),
+        reader=LogDerivedBusinessMetricsReader(
+            create_metric_project(tmp_path, counters=counters)
+        ),
     )
+    return result.model_dump(mode="json")
 
 
 def to_evidence(observation: dict) -> Evidence:
