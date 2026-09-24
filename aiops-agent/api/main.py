@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
 from fastapi import FastAPI, HTTPException, Request
 
@@ -11,10 +12,11 @@ from api.schemas import HealthResponse, IncidentCreatedResponse, IncidentRequest
 from config import Settings, get_settings
 from incident.store import IncidentStore
 from llm.factory import build_llm_provider
-from llm.provider import StructuredLLMProvider
+from llm.provider import LLMTimeoutError, StructuredLLMProvider
 from memory.database import SQLiteDatabase
 from runtime.mcp_client import MCPClientProtocol, StdioMCPClient
 from runtime.orchestrator import RuntimeOrchestrator
+from runtime.reports import DiagnosisReport, DiagnosisStatus
 
 
 def create_app(
@@ -83,8 +85,39 @@ def create_app(
         request: Request,
     ) -> IncidentCreatedResponse:
         orchestrator: RuntimeOrchestrator = request.app.state.orchestrator
-        result = orchestrator.run(incident_request.to_runtime_request())
-        return IncidentCreatedResponse(incident_id=result.incident_id)
+        runtime_request = incident_request.to_runtime_request()
+        incident_id = f"inc_{uuid4().hex}"
+        try:
+            result = orchestrator.run(runtime_request, incident_id=incident_id)
+        except LLMTimeoutError:
+            evidence = database.list_evidence(incident_id)
+            if database.get_report(incident_id) is None:
+                database.save_report(
+                    DiagnosisReport(
+                        incident_id=incident_id,
+                        status=DiagnosisStatus.INCONCLUSIVE,
+                        title="模型调用超时，诊断结果不完整",
+                        conclusion=(
+                            "诊断过程中模型调用超过阶段时限。已保留当前采集的"
+                            "只读证据，未推断未经验证的根因，请人工复核或稍后重试。"
+                        ),
+                        root_cause=None,
+                        confidence=0.0,
+                        evidence_ids=[row["evidence_id"] for row in evidence],
+                    )
+                )
+            return IncidentCreatedResponse(
+                incident_id=incident_id,
+                diagnosis_status="partial",
+                reason="llm_timeout",
+                message="模型调用超时；已有证据已保存，当前诊断为部分结果。",
+                evidence_count=len(evidence),
+            )
+        return IncidentCreatedResponse(
+            incident_id=result.incident_id,
+            diagnosis_status="completed",
+            evidence_count=len(database.list_evidence(result.incident_id)),
+        )
 
     @application.get("/api/incidents")
     def list_console_incidents(request: Request) -> list[dict]:

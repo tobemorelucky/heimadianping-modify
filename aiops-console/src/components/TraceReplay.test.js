@@ -21,31 +21,31 @@ const incident = {
 describe('TraceReplay', () => {
   it('reveals only facts available up to the selected Trace event', async () => {
     const wrapper = mount(TraceReplay, { props: { incident } })
-    expect(wrapper.text()).toContain('0 / 8 EVENTS')
+    expect(wrapper.text()).toContain('0 / 8 个事件')
     expect(wrapper.text()).not.toContain('No active consumers')
-    expect(wrapper.text()).toContain('Report 尚未生成')
+    expect(wrapper.text()).toContain('诊断报告尚未生成')
 
     for (let index = 0; index < 4; index += 1) {
       await wrapper.find('[aria-label="下一步"]').trigger('click')
     }
     expect(wrapper.text()).toContain('kafka-consumer-diagnosis')
     expect(wrapper.text()).toContain('get_kafka_status')
-    expect(wrapper.text()).toContain('No active consumers')
+    expect(wrapper.text()).toContain('消费者组没有活跃成员')
     expect(wrapper.text()).not.toContain('SUPPORTED · 96%')
 
     for (let index = 0; index < 2; index += 1) {
       await wrapper.find('[aria-label="下一步"]').trigger('click')
     }
     expect(wrapper.text()).toContain('SUPPORTED · 96%')
-    expect(wrapper.text()).toContain('Report 尚未生成')
+    expect(wrapper.text()).toContain('诊断报告尚未生成')
 
     for (let index = 0; index < 2; index += 1) {
       await wrapper.find('[aria-label="下一步"]').trigger('click')
     }
-    expect(wrapper.text()).toContain('No active members and lag')
+    expect(wrapper.text()).toContain('消费者组无活跃成员且消息持续积压')
     expect(wrapper.find('[aria-label="下一步"]').attributes('disabled')).toBeDefined()
     await wrapper.find('[aria-label="上一步"]').trigger('click')
-    expect(wrapper.text()).toContain('Report 尚未生成')
+    expect(wrapper.text()).toContain('诊断报告尚未生成')
     wrapper.unmount()
   })
 
@@ -55,8 +55,8 @@ describe('TraceReplay', () => {
       const wrapper = mount(TraceReplay, { props: { incident } })
       await wrapper.find('.replay-primary').trigger('click')
       await vi.advanceTimersByTimeAsync(700 * incident.traces.length)
-      expect(wrapper.text()).toContain('8 / 8 EVENTS')
-      expect(wrapper.text()).toContain('No active members and lag')
+      expect(wrapper.text()).toContain('8 / 8 个事件')
+      expect(wrapper.text()).toContain('消费者组无活跃成员且消息持续积压')
       wrapper.unmount()
     } finally {
       vi.useRealTimers()
@@ -68,7 +68,7 @@ describe('TraceReplay', () => {
     for (let index = 0; index < 4; index += 1) {
       await wrapper.find('[aria-label="下一步"]').trigger('click')
     }
-    expect(wrapper.text()).toContain('1 条 Evidence 引用缺少卡片')
+    expect(wrapper.text()).toContain('1 条证据引用缺少卡片')
     wrapper.unmount()
   })
 })

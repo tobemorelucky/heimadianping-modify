@@ -1,6 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { formatTime, percent } from '../format.js'
+import { decisionLabel, formatTime, localizeText, percent, statusLabel, toolLabel } from '../format.js'
 import EvidenceCard from './EvidenceCard.vue'
 import IncidentTimeline from './IncidentTimeline.vue'
 import SkillCard from './SkillCard.vue'
@@ -78,8 +78,8 @@ onBeforeUnmount(stop)
 </script>
 
 <template>
-  <section class="panel replay-panel" aria-label="Trace Replay">
-    <div class="section-head"><div><span class="eyebrow">READ-ONLY TRACE REPLAY</span><h2>Agent Run Replay</h2></div><span class="count-label">{{ position }} / {{ events.length }} EVENTS</span></div>
+  <section class="panel replay-panel" aria-label="诊断轨迹回放">
+    <div class="section-head"><div><span class="eyebrow">只读诊断轨迹回放</span><h2>智能体运行回放</h2></div><span class="count-label">{{ position }} / {{ events.length }} 个事件</span></div>
     <div class="replay-controls">
       <button type="button" class="ghost-button" aria-label="回放到开头" :disabled="position === 0" @click="step(-position)">↺ 开头</button>
       <button type="button" class="ghost-button" aria-label="上一步" :disabled="position === 0" @click="step(-1)">← 上一步</button>
@@ -88,18 +88,18 @@ onBeforeUnmount(stop)
       <span class="replay-progress-label">{{ progress }}%</span>
     </div>
     <div class="replay-progress" role="progressbar" :aria-valuenow="position" :aria-valuemax="events.length" aria-valuemin="0"><span :style="{ width: `${progress}%` }"></span></div>
-    <p class="replay-note">按已保存的 Incident Trace 顺序回放；时间戳保留原始来源。回放不重新调用模型或 MCP Tool。</p>
-    <div v-if="currentEvent" class="replay-current" data-testid="replay-current"><span class="eyebrow">CURRENT EVENT · {{ String(position).padStart(2, '0') }}</span><h3>{{ currentEvent.event_type.replaceAll('_', ' ') }}</h3><p>{{ currentEvent.summary }}</p><time>{{ formatTime(currentEvent.created_at) }}</time></div>
-    <div v-else class="empty-small replay-start">点击“播放”或“下一步”，从 Incident 的首个事件开始。</div>
+    <p class="replay-note">按已保存的故障事件轨迹顺序回放；时间戳保留原始来源。回放不会重新调用模型或 MCP 工具。</p>
+    <div v-if="currentEvent" class="replay-current" data-testid="replay-current"><span class="eyebrow">当前事件 · {{ String(position).padStart(2, '0') }}</span><h3>{{ currentEvent.event_type }}</h3><p>{{ localizeText(currentEvent.summary) }}</p><time>{{ formatTime(currentEvent.created_at) }}</time></div>
+    <div v-else class="empty-small replay-start">点击“播放”或“下一步”，从故障事件的首个轨迹开始。</div>
     <div class="replay-grid">
-      <div class="panel replay-subpanel"><div class="section-head"><div><span class="eyebrow">SEQUENCE SO FAR</span><h2>Timeline</h2></div></div><div class="replay-timeline"><IncidentTimeline :events="visibleEvents" /></div></div>
+      <div class="panel replay-subpanel"><div class="section-head"><div><span class="eyebrow">当前回放序列</span><h2>时间线</h2></div></div><div class="replay-timeline"><IncidentTimeline :events="visibleEvents" /></div></div>
       <div class="replay-facts">
-        <div class="panel replay-subpanel"><span class="eyebrow">SKILL</span><SkillCard :skill="selectedSkill" /></div>
-        <div class="panel replay-subpanel"><span class="eyebrow">TOOL CALLS</span><ol v-if="toolCalls.length" class="tool-list"><li v-for="(event, index) in toolCalls" :key="event.event_id"><span>{{ String(index + 1).padStart(2, '0') }}</span><strong>{{ event.payload.tool_name }}</strong></li></ol><p v-else class="empty-small">此时尚未调用 Tool。</p></div>
-        <div class="panel replay-subpanel"><span class="eyebrow">EVIDENCE</span><div v-if="evidenceCards.length" class="card-stack"><EvidenceCard v-for="item in evidenceCards" :key="item.evidence_id" :evidence="item" /></div><p v-if="missingEvidenceIds.length" class="empty-small">记录不完整：{{ missingEvidenceIds.length }} 条 Evidence 引用缺少卡片。</p><p v-else-if="!evidenceCards.length" class="empty-small">此时尚无 Evidence。</p></div>
-        <div class="panel replay-subpanel"><span class="eyebrow">HYPOTHESIS UPDATE</span><div v-if="hypothesisStates.length" class="replay-hypotheses"><div v-for="item in hypothesisStates" :key="item.hypothesis_id"><strong>{{ item.description }}</strong><span>{{ item.status }} · {{ percent(item.confidence) }}</span></div></div><p v-else class="empty-small">此时尚无 Hypothesis。</p></div>
-        <div class="panel replay-subpanel"><span class="eyebrow">REFLECTION</span><p v-if="lastReflection" class="replay-text">{{ lastReflection.summary }} <span v-if="lastReflection.payload?.decision">({{ lastReflection.payload.decision }})</span></p><p v-else class="empty-small">此时尚未进行 Reflection。</p></div>
-        <div class="panel replay-subpanel"><span class="eyebrow">REPORT</span><template v-if="reportVisible && incident.report"><h3>{{ incident.report.root_cause || '根因未确认' }}</h3><p class="replay-text">{{ incident.report.conclusion }}</p></template><p v-else class="empty-small">Report 尚未生成。</p></div>
+        <div class="panel replay-subpanel"><span class="eyebrow">诊断技能</span><SkillCard :skill="selectedSkill" /></div>
+        <div class="panel replay-subpanel"><span class="eyebrow">工具调用</span><ol v-if="toolCalls.length" class="tool-list"><li v-for="(event, index) in toolCalls" :key="event.event_id"><span>{{ String(index + 1).padStart(2, '0') }}</span><strong>{{ toolLabel(event.payload.tool_name) }}</strong></li></ol><p v-else class="empty-small">此时尚未调用工具。</p></div>
+        <div class="panel replay-subpanel"><span class="eyebrow">诊断证据</span><div v-if="evidenceCards.length" class="card-stack"><EvidenceCard v-for="item in evidenceCards" :key="item.evidence_id" :evidence="item" /></div><p v-if="missingEvidenceIds.length" class="empty-small">记录不完整：{{ missingEvidenceIds.length }} 条证据引用缺少卡片。</p><p v-else-if="!evidenceCards.length" class="empty-small">此时尚无证据。</p></div>
+        <div class="panel replay-subpanel"><span class="eyebrow">假设更新</span><div v-if="hypothesisStates.length" class="replay-hypotheses"><div v-for="item in hypothesisStates" :key="item.hypothesis_id"><strong>{{ item.description }}</strong><span>{{ statusLabel(item.status) }} · {{ percent(item.confidence) }}</span></div></div><p v-else class="empty-small">此时尚无故障假设。</p></div>
+        <div class="panel replay-subpanel"><span class="eyebrow">反思决策</span><p v-if="lastReflection" class="replay-text">{{ localizeText(lastReflection.summary) }} <span v-if="lastReflection.payload?.decision">（{{ decisionLabel(lastReflection.payload.decision) }}）</span></p><p v-else class="empty-small">此时尚未进行反思决策。</p></div>
+        <div class="panel replay-subpanel"><span class="eyebrow">诊断报告</span><template v-if="reportVisible && incident.report"><h3>{{ localizeText(incident.report.root_cause) || '根因未确认' }}</h3><p class="replay-text">{{ localizeText(incident.report.conclusion) }}</p></template><p v-else class="empty-small">诊断报告尚未生成。</p></div>
       </div>
     </div>
   </section>

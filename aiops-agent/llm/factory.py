@@ -23,5 +23,20 @@ def build_llm_provider(settings: Settings) -> StructuredLLMProvider:
         base_url=settings.ai_model_base_url,
         api_key=api_key,
         model=settings.ai_model_name,
+        thinking=settings.ai_model_thinking,
         timeout_seconds=settings.ai_model_timeout_seconds,
+        operation_timeouts={
+            "plan": (
+                settings.ai_model_planner_timeout_seconds
+                or settings.ai_model_timeout_seconds
+            ),
+            "reflect": (
+                settings.ai_model_reflection_timeout_seconds
+                or settings.ai_model_timeout_seconds
+            ),
+            "report": (
+                settings.ai_model_reporter_timeout_seconds
+                or settings.ai_model_timeout_seconds
+            ),
+        },
     )

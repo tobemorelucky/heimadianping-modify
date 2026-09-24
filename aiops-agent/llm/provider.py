@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
-from typing import Any, TypeVar
+from typing import Any, Literal, Mapping, TypeVar
 
 import httpx
 from pydantic import BaseModel, ValidationError
@@ -23,6 +23,10 @@ class LLMConfigurationError(LLMProviderError):
 
 class LLMResponseValidationError(LLMProviderError):
     """Raised when a model response is not valid structured output."""
+
+
+class LLMTimeoutError(LLMProviderError):
+    """Raised when one bounded LLM operation exceeds its configured timeout."""
 
 
 class StructuredLLMProvider(ABC):
@@ -81,7 +85,9 @@ class OpenAICompatibleProvider(StructuredLLMProvider):
         base_url: str,
         api_key: str,
         model: str,
+        thinking: Literal["enabled", "disabled", "auto"] = "disabled",
         timeout_seconds: float = 30.0,
+        operation_timeouts: Mapping[str, float] | None = None,
         client: httpx.Client | None = None,
     ) -> None:
         if not base_url.strip() or not api_key.strip() or not model.strip():
@@ -91,6 +97,9 @@ class OpenAICompatibleProvider(StructuredLLMProvider):
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._model = model
+        self._thinking = thinking
+        self._timeout_seconds = timeout_seconds
+        self._operation_timeouts = dict(operation_timeouts or {})
         self._client = client or httpx.Client(timeout=timeout_seconds)
 
     def _complete(
@@ -121,6 +130,7 @@ class OpenAICompatibleProvider(StructuredLLMProvider):
                 json={
                     "model": self._model,
                     "temperature": 0,
+                    "thinking": {"type": self._thinking},
                     "messages": [
                         {
                             "role": "system",
@@ -132,10 +142,18 @@ class OpenAICompatibleProvider(StructuredLLMProvider):
                         {"role": "user", "content": user_message},
                     ],
                 },
+                timeout=self._operation_timeouts.get(
+                    operation,
+                    self._timeout_seconds,
+                ),
             )
             response.raise_for_status()
             response_payload = response.json()
             content = response_payload["choices"][0]["message"]["content"]
+        except httpx.TimeoutException as exc:
+            raise LLMTimeoutError(
+                f"LLM operation timed out: {operation}"
+            ) from exc
         except (httpx.HTTPError, KeyError, IndexError, TypeError, ValueError) as exc:
             raise LLMProviderError("OpenAI-compatible API request failed") from exc
 

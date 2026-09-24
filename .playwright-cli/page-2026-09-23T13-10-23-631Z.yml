@@ -1,0 +1,89 @@
+- generic [ref=e3]:
+  - complementary [ref=e4]:
+    - link "AIOps Console 首页" [ref=e5] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e10]:
+        - strong [ref=e11]: AIOps
+        - generic [ref=e12]: 智能诊断控制台
+    - generic [ref=e13]: 工作区
+    - navigation "主导航" [ref=e14]:
+      - link "◫ 总览" [ref=e15] [cursor=pointer]:
+        - /url: /
+        - generic [ref=e16]: ◫
+        - text: 总览
+    - generic [ref=e17]: 本地 · 只读模式
+  - generic [ref=e20]:
+    - banner [ref=e21]:
+      - generic [ref=e22]:
+        - generic [ref=e23]: HMDP
+        - generic [ref=e24]: /
+        - generic [ref=e25]: 智能诊断框架
+      - generic [ref=e26]: 本地演示环境
+    - main [ref=e28]:
+      - generic [ref=e29]:
+        - generic [ref=e30]:
+          - generic [ref=e31]:
+            - text: 运行中心 / 01
+            - heading "智能诊断总览。" [level=1] [ref=e32]
+            - paragraph [ref=e33]: 巡检信号形成故障事件，诊断智能体通过技能、工具与证据完成研判。
+          - generic [ref=e34]:
+            - generic [ref=e35]: 实时监控中 · 每 5 秒刷新最后更新时间：2026/09/23 21:10:23
+            - button "↻ 手动刷新" [ref=e37] [cursor=pointer]
+        - region "巡检摘要" [ref=e38]:
+          - generic [ref=e39]:
+            - text: 系统健康
+            - generic [ref=e40]: 健康
+            - paragraph [ref=e42]: 当前无活跃故障事件
+          - generic [ref=e43]:
+            - text: 最近巡检
+            - generic [ref=e44]: 2026/09/23 21:10:17
+            - paragraph [ref=e45]: MySQL 健康检查 · get_mysql_health · 部分完成 partial
+          - generic [ref=e46]:
+            - text: 活跃故障事件
+            - generic [ref=e47]: "0"
+            - paragraph [ref=e48]: 等待智能诊断或人工处理
+        - generic [ref=e49]:
+          - generic [ref=e50]:
+            - generic [ref=e51]:
+              - text: 最近活动
+              - heading "最近故障事件" [level=2] [ref=e52]
+            - generic [ref=e53]: 共 3 条
+          - generic [ref=e54]:
+            - link "UI3 LLM 全链路验收 inc_477e41f0…2d3143 · human 等待人工复核 awaiting_human 2026/09/23 21:08:54 ↗" [ref=e55] [cursor=pointer]:
+              - /url: /incidents/inc_477e41f0de1744f694d14739f32d3143
+              - generic [ref=e57]:
+                - strong [ref=e58]: UI3 LLM 全链路验收
+                - text: inc_477e41f0…2d3143 · human
+              - generic [ref=e59]:
+                - generic [ref=e60]: 等待人工复核 awaiting_human
+                - time [ref=e61]: 2026/09/23 21:08:54
+              - generic [ref=e62]: ↗
+            - link "MySQL 持久化失败 · 真实记录 inc_9409e7bc…ab17d1 · 历史记录回放 已记录 RECORDED 进行中 ACTIVE 2026/09/23 16:10:34 ↗" [ref=e63] [cursor=pointer]:
+              - /url: /incidents/inc_9409e7bc55144ad99321a6c508ab17d1
+              - generic [ref=e65]:
+                - strong [ref=e66]: MySQL 持久化失败 · 真实记录
+                - text: inc_9409e7bc…ab17d1 · 历史记录回放
+              - generic [ref=e67]:
+                - generic [ref=e68]: 已记录 RECORDED
+                - generic [ref=e69]: 进行中 ACTIVE
+                - time [ref=e70]: 2026/09/23 16:10:34
+              - generic [ref=e71]: ↗
+            - link "Kafka 消费者停机 · 真实记录 inc_f501c4c1…96b2f2 · 历史记录回放 已记录 RECORDED 进行中 ACTIVE 2026/09/22 10:58:33 ↗" [ref=e72] [cursor=pointer]:
+              - /url: /incidents/inc_f501c4c1bc92463887be3935ad96b2f2
+              - generic [ref=e74]:
+                - strong [ref=e75]: Kafka 消费者停机 · 真实记录
+                - text: inc_f501c4c1…96b2f2 · 历史记录回放
+              - generic [ref=e76]:
+                - generic [ref=e77]: 已记录 RECORDED
+                - generic [ref=e78]: 进行中 ACTIVE
+                - time [ref=e79]: 2026/09/22 10:58:33
+              - generic [ref=e80]: ↗
+        - generic [ref=e81]:
+          - generic [ref=e82]: 持续巡检
+          - generic [ref=e83]: →
+          - generic [ref=e84]: 异常检测
+          - generic [ref=e85]: →
+          - generic [ref=e86]: 智能诊断
+          - generic [ref=e87]: →
+          - generic [ref=e88]: 权限治理
+    - contentinfo [ref=e89]: AIOps 智能诊断框架 · 仅诊断 · 操作需要人工审批

@@ -56,3 +56,7 @@ class IncidentCreatedResponse(BaseModel):
     """Stable response returned after synchronous diagnosis completes."""
 
     incident_id: str
+    diagnosis_status: Literal["completed", "partial"] = "completed"
+    reason: Literal["llm_timeout"] | None = None
+    message: str | None = None
+    evidence_count: int = Field(default=0, ge=0)

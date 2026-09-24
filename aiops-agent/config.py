@@ -31,7 +31,17 @@ class Settings(BaseModel):
     ai_model_base_url: str | None = None
     ai_model_api_key: SecretStr | None = None
     ai_model_name: str | None = None
+    ai_model_thinking: Literal["enabled", "disabled", "auto"] = "disabled"
     ai_model_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    ai_model_planner_timeout_seconds: float | None = Field(
+        default=None, gt=0, le=120
+    )
+    ai_model_reflection_timeout_seconds: float | None = Field(
+        default=None, gt=0, le=120
+    )
+    ai_model_reporter_timeout_seconds: float | None = Field(
+        default=None, gt=0, le=120
+    )
     hmdp_project_root: Path = PROJECT_ROOT.parent
     mcp_tool_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     kafka_bootstrap_servers: str = Field(
@@ -116,7 +126,17 @@ def load_settings(
         "ai_model_base_url": ("AI_MODEL_BASE_URL", "BASE_URL", "DOUBAO_BASE_URL"),
         "ai_model_api_key": ("AI_MODEL_API_KEY", "ARK_API_KEY", "DOUBAO_API_KEY"),
         "ai_model_name": ("AI_MODEL_NAME", "MODEL", "DOUBAO_MODEL"),
+        "ai_model_thinking": ("AI_MODEL_THINKING",),
         "ai_model_timeout_seconds": ("AI_MODEL_TIMEOUT_SECONDS",),
+        "ai_model_planner_timeout_seconds": (
+            "AI_MODEL_PLANNER_TIMEOUT_SECONDS",
+        ),
+        "ai_model_reflection_timeout_seconds": (
+            "AI_MODEL_REFLECTION_TIMEOUT_SECONDS",
+        ),
+        "ai_model_reporter_timeout_seconds": (
+            "AI_MODEL_REPORTER_TIMEOUT_SECONDS",
+        ),
         "hmdp_project_root": ("HMDP_PROJECT_ROOT",),
         "mcp_tool_timeout_seconds": ("AIOPS_MCP_TOOL_TIMEOUT_SECONDS",),
         "kafka_bootstrap_servers": ("KAFKA_BOOTSTRAP_SERVERS",),

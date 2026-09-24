@@ -14,7 +14,10 @@ vi.mock('../api/client.js', () => ({
 
 const routerLink = { template: '<a><slot /></a>' }
 
-beforeEach(() => vi.clearAllMocks())
+beforeEach(() => {
+  vi.useRealTimers()
+  vi.clearAllMocks()
+})
 
 describe('AIOps Console', () => {
   it('shows Healthy when there are no incidents', async () => {
@@ -22,8 +25,8 @@ describe('AIOps Console', () => {
     listIncidents.mockResolvedValue([])
     const wrapper = mount(Dashboard, { global: { stubs: { RouterLink: routerLink } } })
     await flushPromises()
-    expect(wrapper.text()).toContain('Healthy')
-    expect(wrapper.text()).toContain('当前没有 Incident')
+    expect(wrapper.text()).toContain('系统健康')
+    expect(wrapper.text()).toContain('当前没有故障事件')
     expect(wrapper.text()).toContain('尚无持续巡检记录')
   })
 
@@ -35,9 +38,9 @@ describe('AIOps Console', () => {
     }])
     const wrapper = mount(Dashboard, { global: { stubs: { RouterLink: routerLink } } })
     await flushPromises()
-    expect(wrapper.text()).toContain('Attention')
-    expect(wrapper.text()).toContain('存在未恢复 Incident')
-    expect(wrapper.text()).not.toContain('Healthy')
+    expect(wrapper.text()).toContain('需关注')
+    expect(wrapper.text()).toContain('存在未恢复故障事件')
+    expect(wrapper.text()).not.toContain('当前无活跃故障事件')
   })
 
   it('shows Healthy when the fault is recovered', async () => {
@@ -48,7 +51,7 @@ describe('AIOps Console', () => {
     }])
     const wrapper = mount(Dashboard, { global: { stubs: { RouterLink: routerLink } } })
     await flushPromises()
-    expect(wrapper.text()).toContain('Healthy')
+    expect(wrapper.text()).toContain('系统健康')
     expect(wrapper.text()).toContain('RECOVERED')
   })
 
@@ -57,8 +60,8 @@ describe('AIOps Console', () => {
     listIncidents.mockRejectedValue(new Error('connection refused'))
     const wrapper = mount(Dashboard, { global: { stubs: { RouterLink: routerLink } } })
     await flushPromises()
-    expect(wrapper.text()).toContain('Agent Offline')
-    expect(wrapper.text()).not.toContain('Healthy')
+    expect(wrapper.text()).toContain('诊断服务离线')
+    expect(wrapper.text()).not.toContain('系统健康')
     expect(wrapper.find('button').exists()).toBe(true)
   })
 
@@ -68,11 +71,11 @@ describe('AIOps Console', () => {
     listIncidents.mockRejectedValueOnce(new Error('connection refused')).mockResolvedValueOnce([])
     const wrapper = mount(Dashboard, { global: { stubs: { RouterLink: routerLink } } })
     await flushPromises()
-    expect(wrapper.text()).toContain('Agent Offline')
+    expect(wrapper.text()).toContain('诊断服务离线')
     await wrapper.find('.offline-panel button').trigger('click')
     await flushPromises()
-    expect(wrapper.text()).toContain('Healthy')
-    expect(wrapper.text()).not.toContain('Agent Offline')
+    expect(wrapper.text()).toContain('系统健康')
+    expect(wrapper.text()).not.toContain('诊断服务离线')
   })
 
   it('renders Kafka timeline, evidence, skill, and confidence changes', async () => {
@@ -94,15 +97,15 @@ describe('AIOps Console', () => {
     const wrapper = mount(IncidentDetail, { props: { id: 'inc_kafka_demo' }, global: { stubs: { RouterLink: routerLink } } })
     await flushPromises()
     expect(wrapper.text()).toContain('kafka-consumer-diagnosis')
-    expect(wrapper.text()).toContain('Incident · ACTIVE')
-    expect(wrapper.text()).toContain('Diagnosis · COMPLETED')
+    expect(wrapper.text()).toContain('故障状态：进行中 ACTIVE')
+    expect(wrapper.text()).toContain('诊断状态：诊断完成 COMPLETED')
     expect(wrapper.text()).toContain('get_kafka_status')
-    expect(wrapper.text()).toContain('member_count: 0')
+    expect(wrapper.text()).toContain('消费者成员数（member_count）：0')
     expect(wrapper.text()).toContain('UNKNOWN 0%')
     expect(wrapper.text()).toContain('SUPPORTED 96%')
     await wrapper.find('button[aria-pressed="false"]').trigger('click')
-    expect(wrapper.text()).toContain('Agent Run Replay')
-    expect(wrapper.text()).toContain('0 / 4 EVENTS')
+    expect(wrapper.text()).toContain('智能体运行回放')
+    expect(wrapper.text()).toContain('0 / 4 个事件')
   })
 
   it('renders the recorded MySQL path with Kafka contradiction and final support', async () => {
@@ -134,19 +137,19 @@ describe('AIOps Console', () => {
     const wrapper = mount(IncidentDetail, { props: { id: 'inc_mysql_real' }, global: { stubs: { RouterLink: routerLink } } })
     await flushPromises()
 
-    expect(wrapper.text()).toContain('READ-ONLY RECORDING')
+    expect(wrapper.text()).toContain('只读记录 RECORDED')
     expect(wrapper.text()).toContain('get_business_metrics')
     expect(wrapper.text()).toContain('get_mysql_health')
     expect(wrapper.text()).toContain('CONTRADICTED 10%')
     expect(wrapper.text()).toContain('SUPPORTED 93%')
-    expect(wrapper.text()).toContain('MySQL Persistence Failure')
+    expect(wrapper.text()).toContain('MySQL 持久化故障')
   })
 
   it('shows Agent Offline on Incident Detail when the API is unreachable', async () => {
     getIncident.mockRejectedValue(new Error('connection refused'))
     const wrapper = mount(IncidentDetail, { props: { id: 'inc_kafka_demo' }, global: { stubs: { RouterLink: routerLink } } })
     await flushPromises()
-    expect(wrapper.text()).toContain('Agent Offline')
+    expect(wrapper.text()).toContain('诊断服务离线')
     expect(wrapper.text()).not.toContain('根因尚未确认')
   })
 
@@ -154,8 +157,8 @@ describe('AIOps Console', () => {
     getIncident.mockRejectedValue({ response: { status: 404 } })
     const wrapper = mount(IncidentDetail, { props: { id: 'inc_missing' }, global: { stubs: { RouterLink: routerLink } } })
     await flushPromises()
-    expect(wrapper.text()).toContain('此 Incident 不存在')
-    expect(wrapper.text()).not.toContain('Agent Offline')
+    expect(wrapper.text()).toContain('此故障事件不存在')
+    expect(wrapper.text()).not.toContain('诊断服务离线')
   })
 
   it('displays a proposal without an execution control', async () => {
@@ -173,6 +176,48 @@ describe('AIOps Console', () => {
     getIncident.mockRejectedValue(new Error('connection refused'))
     const wrapper = mount(Proposal, { props: { id: 'inc_kafka_demo' }, global: { stubs: { RouterLink: routerLink } } })
     await flushPromises()
-    expect(wrapper.text()).toContain('Agent Offline')
+    expect(wrapper.text()).toContain('诊断服务离线')
+  })
+
+  it('refreshes Dashboard every five seconds and stops after leaving', async () => {
+    vi.useFakeTimers()
+    getMonitoringSummary.mockResolvedValue({ health: 'healthy', active_incident_count: 0, last_inspection_at: null })
+    listIncidents.mockResolvedValue([])
+    const wrapper = mount(Dashboard, { global: { stubs: { RouterLink: routerLink } } })
+    await flushPromises()
+    expect(getMonitoringSummary).toHaveBeenCalledTimes(1)
+    expect(wrapper.text()).toContain('实时监控中 · 每 5 秒刷新')
+
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    expect(getMonitoringSummary).toHaveBeenCalledTimes(2)
+    wrapper.unmount()
+
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(getMonitoringSummary).toHaveBeenCalledTimes(2)
+  })
+
+  it('refreshes Incident detail every three seconds without overlapping requests', async () => {
+    vi.useFakeTimers()
+    let resolveIncident
+    getIncident.mockReturnValue(new Promise(resolve => { resolveIncident = resolve }))
+    const wrapper = mount(IncidentDetail, { props: { id: 'inc_live' }, global: { stubs: { RouterLink: routerLink } } })
+    await vi.advanceTimersByTimeAsync(9000)
+    expect(getIncident).toHaveBeenCalledTimes(1)
+
+    resolveIncident({
+      incident_id: 'inc_live', title: '实时诊断', status: 'ACTIVE', diagnosis_status: 'RUNNING',
+      severity: 'medium', runtime_status: 'investigating', created_at: '2026-09-23T08:00:00Z',
+      trigger_signal_ids: [], traces: [], evidence: [], hypotheses: [], proposals: [], report: null
+    })
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(3000)
+    await flushPromises()
+    expect(getIncident).toHaveBeenCalledTimes(2)
+    expect(wrapper.text()).toContain('实时监控中 · 每 3 秒刷新')
+    wrapper.unmount()
+
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(getIncident).toHaveBeenCalledTimes(2)
   })
 })

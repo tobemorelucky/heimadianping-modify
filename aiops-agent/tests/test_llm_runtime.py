@@ -10,7 +10,11 @@ from context.manager import ContextManager
 from context.packet import ContextStage
 from llm.factory import build_llm_provider
 from llm.mock import MockLLMProvider
-from llm.provider import LLMResponseValidationError, OpenAICompatibleProvider
+from llm.provider import (
+    LLMResponseValidationError,
+    LLMTimeoutError,
+    OpenAICompatibleProvider,
+)
 from memory.database import SQLiteDatabase
 from runtime.mcp_client import StdioMCPClient
 from runtime.models import IncidentCreate, IncidentTask
@@ -158,6 +162,8 @@ def test_openai_compatible_provider_uses_chat_completions_contract():
         assert request.headers["authorization"] == "Bearer test-key"
         body = json.loads(request.content)
         assert body["model"] == "test-model"
+        assert body["thinking"] == {"type": "auto"}
+        assert request.extensions["timeout"]["read"] == 17.0
         return httpx.Response(
             200,
             json={
@@ -178,6 +184,9 @@ def test_openai_compatible_provider_uses_chat_completions_contract():
         base_url="https://model.example/v1/",
         api_key="test-key",
         model="test-model",
+        thinking="auto",
+        timeout_seconds=30,
+        operation_timeouts={"plan": 17},
         client=httpx.Client(transport=httpx.MockTransport(handler)),
     )
 
@@ -189,3 +198,23 @@ def test_openai_compatible_provider_uses_chat_completions_contract():
     )
 
     assert output.tool_name == "search_application_logs"
+
+
+def test_openai_compatible_timeout_is_structured():
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("model is slow", request=request)
+
+    provider = OpenAICompatibleProvider(
+        base_url="https://model.example/v1",
+        api_key="test-key",
+        model="test-model",
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+    )
+
+    with pytest.raises(LLMTimeoutError, match="plan"):
+        provider.generate_structured(
+            operation="plan",
+            system_prompt="Return a plan.",
+            input_payload={"incident": {}},
+            response_model=PlanOutput,
+        )

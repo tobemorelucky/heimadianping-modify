@@ -70,3 +70,25 @@ def test_business_metrics_loopback_ports_are_loaded_from_environment():
 
     assert settings.business_metrics_web_port == 18181
     assert settings.business_metrics_consumer_port == 18183
+
+
+def test_llm_thinking_and_stage_timeouts_are_configurable():
+    settings = load_settings(
+        environ={
+            "AI_MODEL_THINKING": "auto",
+            "AI_MODEL_PLANNER_TIMEOUT_SECONDS": "11",
+            "AI_MODEL_REFLECTION_TIMEOUT_SECONDS": "22",
+            "AI_MODEL_REPORTER_TIMEOUT_SECONDS": "33",
+        }
+    )
+
+    assert settings.ai_model_thinking == "auto"
+    assert settings.ai_model_planner_timeout_seconds == 11
+    assert settings.ai_model_reflection_timeout_seconds == 22
+    assert settings.ai_model_reporter_timeout_seconds == 33
+
+
+def test_llm_thinking_defaults_to_disabled(tmp_path):
+    settings = load_settings(env_file=tmp_path / "missing.env", environ={})
+
+    assert settings.ai_model_thinking == "disabled"
